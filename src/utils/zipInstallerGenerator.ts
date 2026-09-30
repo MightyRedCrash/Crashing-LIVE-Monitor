@@ -35,7 +35,7 @@ export async function generateInstallerZip(params: ZipConfigParams): Promise<Blo
   // 1. INSTALL_WIZARD.bat (Auto-elevable, a prueba de fallos, con menú inicial)
   // =========================================================================
   const batLauncher = `@echo off
-setlocal EnableDelayedExpansion
+setlocal EnableExtensions
 title Crashing Live Monitor - Wizard de Instalacion v2.6
 
 :: 1. Auto-elevacion con permisos de Administrador mediante UAC si no es admin
@@ -46,7 +46,7 @@ if %errorlevel% neq 0 (
     echo  [i] Solicitando elevacion de permisos de Administrador...
     echo      (Por favor, pulse "Si" en la ventana de Control de Cuentas de Usuario)
     echo ========================================================================
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
     exit /b
 )
 
@@ -115,7 +115,7 @@ echo ========================================================================
 echo  [+] INICIANDO INSTALACION DEL AGENTE DE MONITOREO...
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { & '%~dp0Wizard_Instalador.ps1' -Mode Agent }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Agent
 goto FIN
 
 :INSTALAR_MONITOR
@@ -124,7 +124,7 @@ echo ========================================================================
 echo  [+] INICIANDO CONFIGURACION DEL MONITOR CENTRAL...
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { & '%~dp0Wizard_Instalador.ps1' -Mode Monitor }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Monitor
 goto FIN
 
 :INSTALAR_AMBOS
@@ -133,7 +133,7 @@ echo ========================================================================
 echo  [+] INICIANDO INSTALACION COMBINADA (AGENTE + MONITOR)...
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { & '%~dp0Wizard_Instalador.ps1' -Mode Both }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Both
 goto FIN
 
 :DESINSTALAR
@@ -142,7 +142,7 @@ echo ========================================================================
 echo  [+] INICIANDO DESINSTALACION COMPLETA Y LIMPIEZA...
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { & '%~dp0uninstall.ps1' }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\uninstall.ps1"
 goto FIN
 
 :FIN
@@ -162,13 +162,13 @@ exit /b 0
   // 1.1 INSTALADOR_DIRECTO_AGENTE.bat (Acceso directo para instalar solo Agente)
   // =========================================================================
   const batAgentOnly = `@echo off
-setlocal EnableDelayedExpansion
+setlocal EnableExtensions
 title Crashing Live - Instalador Agente de Monitoreo
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [i] Solicitando permisos de Administrador...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
     exit /b
 )
 
@@ -178,7 +178,7 @@ echo ========================================================================
 echo  [+] INSTALACION DIRECTA: AGENTE DE MONITOREO (CRASHING LIVE)
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { & '%~dp0Wizard_Instalador.ps1' -Mode Agent }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Agent
 echo.
 pause
 exit /b 0
@@ -188,13 +188,13 @@ exit /b 0
   // 1.2 INSTALADOR_DIRECTO_MONITOR.bat (Acceso directo para instalar solo Monitor)
   // =========================================================================
   const batMonitorOnly = `@echo off
-setlocal EnableDelayedExpansion
+setlocal EnableExtensions
 title Crashing Live - Instalador Monitor Central
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [i] Solicitando permisos de Administrador...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
     exit /b
 )
 
@@ -204,7 +204,7 @@ echo ========================================================================
 echo  [+] INSTALACION DIRECTA: MONITOR CENTRAL / PANEL (CRASHING LIVE)
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { & '%~dp0Wizard_Instalador.ps1' -Mode Monitor }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Monitor
 echo.
 pause
 exit /b 0
@@ -214,13 +214,13 @@ exit /b 0
   // 1.3 DESINSTALAR_COMPLETO.bat (Lanzador directo para desinstalar)
   // =========================================================================
   const batUninstallOnly = `@echo off
-setlocal EnableDelayedExpansion
+setlocal EnableExtensions
 title Crashing Live - Desinstalador Oficial de la Suite
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [i] Solicitando permisos de Administrador para desinstalar...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k \"\"%~f0\"\"' -Verb RunAs"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
     exit /b
 )
 
@@ -243,7 +243,7 @@ if /i not "%CONFIRM%"=="S" (
 )
 
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { & '%~dp0uninstall.ps1' }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\uninstall.ps1"
 echo.
 pause
 exit /b 0

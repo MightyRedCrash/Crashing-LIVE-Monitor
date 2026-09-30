@@ -58,7 +58,8 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({
       const url = URL.createObjectURL(zipBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `CrashingLive_Suite_Installer_${formData.agentHostname}.zip`;
+      const safeHost = formData.agentHostname.replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.download = `CrashingLive_Installer_${safeHost}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

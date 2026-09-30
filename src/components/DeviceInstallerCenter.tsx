@@ -157,20 +157,34 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
         <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-mono text-zinc-400">
           <span className="text-zinc-500 uppercase font-bold text-[10px]">Contenido del ZIP:</span>
           <span className="flex items-center gap-1 text-white">
-            <Play className="w-3 h-3 text-[#00ff66]" /> <strong>INSTALL_WIZARD.bat</strong> (Lanzador)
+            <Play className="w-3 h-3 text-[#00ff66]" /> <strong>INSTALL_WIZARD.bat</strong> (Lanzador con Auto-Elevación)
+          </span>
+          <span className="flex items-center gap-1 text-[#ff6b00]">
+            <Play className="w-3 h-3" /> INSTALADOR_DIRECTO_AGENTE.bat
+          </span>
+          <span className="flex items-center gap-1 text-[#00ff66]">
+            <Play className="w-3 h-3" /> INSTALADOR_DIRECTO_MONITOR.bat
+          </span>
+          <span className="flex items-center gap-1 text-red-400">
+            <Play className="w-3 h-3" /> DESINSTALAR_COMPLETO.bat
           </span>
           <span className="flex items-center gap-1 text-zinc-300">
-            <FileCode className="w-3 h-3 text-[#ff6b00]" /> Wizard_Instalador.ps1
+            <FileCode className="w-3 h-3 text-cyan-400" /> Wizard_Instalador.ps1
           </span>
           <span className="flex items-center gap-1 text-zinc-300">
-            <FileCode className="w-3 h-3 text-cyan-400" /> agent_daemon.py
+            <FileCode className="w-3 h-3 text-cyan-400" /> uninstall.ps1
           </span>
-          <span className="flex items-center gap-1 text-zinc-300">
-            <Database className="w-3 h-3 text-amber-400" /> schema.sql
-          </span>
-          <span className="flex items-center gap-1 text-zinc-300">
-            <FileCode className="w-3 h-3 text-zinc-400" /> LEEME_INSTRUCCIONES.txt
-          </span>
+        </div>
+
+        {/* Notificación de Integración con Programas de Windows */}
+        <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] font-mono text-zinc-300 flex items-start gap-2.5">
+          <ShieldCheck className="w-4 h-4 text-[#00ff66] shrink-0 mt-0.5" />
+          <div>
+            <strong className="text-white">Desinstalable desde "Programas y Características" de Windows:</strong>
+            <p className="text-zinc-400 mt-0.5">
+              Al instalarse, se registra formalmente en Windows (<code className="text-zinc-300">appwiz.cpl</code>). Podrá desinstalarlo y borrar todos sus archivos y servicios en cualquier momento desde <strong>Configuración &gt; Aplicaciones &gt; Aplicaciones instaladas</strong> o haciendo clic en <strong>DESINSTALAR_COMPLETO.bat</strong>.
+            </p>
+          </div>
         </div>
 
         {/* Previsualización interactiva de la 1ª Pantalla del Wizard Instalador */}
@@ -180,7 +194,7 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
               <span className="text-[#00ff66] font-bold flex items-center gap-1.5">
                 <Terminal className="w-3.5 h-3.5" /> Consola de Windows al ejecutar "INSTALL_WIZARD.bat"
               </span>
-              <span className="text-zinc-500">Ejecutado como Administrador</span>
+              <span className="text-zinc-500">Auto-elevado como Administrador (CRLF nativo)</span>
             </div>
 
             <div className="space-y-2 text-[11px] text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-zinc-850 whitespace-pre-wrap leading-relaxed">
@@ -201,7 +215,7 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
                   <span className="text-zinc-400 text-[10px] pl-4 block">
                     - Instala el daemon en segundo plano (Python / Windows Service)<br />
                     - Sensores de CPU, RAM, Red, Discos y Procesos con telemetría en vivo<br />
-                    - Guardrails de ejecución PowerShell para autorreparación de incidentes
+                    - Se registra en "Programas y Características" de Windows
                   </span>
                 </div>
                 <div>
@@ -218,9 +232,15 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
                     - Instala tanto el Agente de telemetría como el Monitor Central en esta máquina
                   </span>
                 </div>
+                <div>
+                  <strong className="text-red-400">[4] DESINSTALAR Y BORRAR</strong> (Limpieza Completa)<br />
+                  <span className="text-zinc-400 text-[10px] pl-4 block">
+                    - Detiene servicios, elimina reglas de firewall y borra C:\CrashingLive
+                  </span>
+                </div>
               </div>
               <div className="pt-2 text-white font-bold flex items-center gap-2">
-                <span>Seleccione una opción [1, 2 o 3] y presione ENTER:</span>
+                <span>Seleccione una opción [1, 2, 3, 4 o 5] y presione ENTER:</span>
                 <span className="w-2 h-4 bg-[#00ff66] animate-pulse inline-block" />
               </div>
             </div>

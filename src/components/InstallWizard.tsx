@@ -18,8 +18,11 @@ import {
   AlertCircle,
   RefreshCw,
   Cpu,
-  PackageCheck
+  PackageCheck,
+  FolderArchive,
+  Loader2
 } from 'lucide-react';
+import { generateInstallerZip } from '../utils/zipInstallerGenerator';
 
 interface InstallWizardProps {
   config: WizardConfig;
@@ -37,6 +40,35 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({
   const [dbTestState, setDbTestState] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [activeCodeTab, setActiveCodeTab] = useState<'python' | 'sql' | 'powershell'>('powershell');
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
+  const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+
+  const handleDownloadZip = async () => {
+    setIsGeneratingZip(true);
+    try {
+      const zipBlob = await generateInstallerZip({
+        hostName: formData.agentHostname,
+        ipAddress: formData.listenHost,
+        port: formData.listenPort,
+        dbHost: formData.dbHost,
+        dbPort: formData.dbPort,
+        dbName: formData.dbName,
+        dbUser: formData.dbUser,
+        dbPass: formData.dbPass
+      });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CrashingLive_Suite_Installer_${formData.agentHostname}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error al generar archivo ZIP:', err);
+    } finally {
+      setIsGeneratingZip(false);
+    }
+  };
 
   // Component Auto-Installer & Dependency Checker State
   const [isInstallingComponents, setIsInstallingComponents] = useState(false);
@@ -1009,6 +1041,42 @@ Write-Host "==========================================================" -Foregro
                 <p className="text-zinc-400 mt-1 text-[11px]">
                   El script de PowerShell <code className="text-[#00ff66]">Install-CrashingLive.ps1</code> instalará o actualizará automáticamente todos los componentes que falten en el equipo.
                 </p>
+              </div>
+
+              {/* ZIP Package Download Banner */}
+              <div className="p-3.5 rounded-xl bg-[#00ff66]/10 border border-[#00ff66]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-[#00ff66]/20 text-[#00ff66] flex items-center justify-center shrink-0 shadow-sm">
+                    <FolderArchive className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-white text-xs flex items-center gap-2">
+                      <span>Paquete Completo .ZIP con Wizard Instalador</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-[#00ff66] text-black font-black rounded">RECOMENDADO</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-300 mt-0.5">
+                      Contiene <strong>INSTALL_WIZARD.bat</strong>. Al ejecutarlo, <strong className="text-[#00ff66]">lo primero que muestra es el selector para elegir si este equipo será [1] Agente de Monitoreo o [2] Monitor Central</strong> (o Ambos).
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleDownloadZip}
+                  disabled={isGeneratingZip}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-mono font-black text-xs transition-all shadow-[0_0_15px_rgba(0,255,102,0.3)] shrink-0 disabled:opacity-50"
+                >
+                  {isGeneratingZip ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generando ZIP...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Descargar ZIP con Wizard</span>
+                    </>
+                  )}
+                </button>
               </div>
 
               {/* Code Tab Switcher */}

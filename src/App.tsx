@@ -88,7 +88,7 @@ export default function App() {
   const [showServerManager, setShowServerManager] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showAndroidSim, setShowAndroidSim] = useState(false);
-  const [showQuickBanner, setShowQuickBanner] = useState(true);
+  const [showQuickBanner, setShowQuickBanner] = useState(false);
 
   // Connected Servers List
   const [servers, setServers] = useState<ConnectedServer[]>([
@@ -630,7 +630,7 @@ export default function App() {
     theme === 'retro-green'
       ? 'theme-retro-green bg-[#030a04] text-[#00ff66]'
       : theme === 'light'
-      ? 'theme-light bg-[#f4f4f5] text-zinc-900'
+      ? 'theme-light bg-[#f8fafc] text-zinc-900'
       : 'bg-black text-white';
 
   return (

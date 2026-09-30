@@ -68,39 +68,233 @@
   opacity: 0.7;
 }
 
-/* Light Mode Overrides */
+/* ========================================================================= */
+/* Light Mode Monochromatic Overrides (Blanco, Gris y Negro Puro)             */
+/* Salvo el Logo Oficial y el Nombre de la Marca                             */
+/* ========================================================================= */
 .theme-light {
-  background-color: #f4f4f5 !important;
+  background-color: #f8fafc !important;
   color: #09090b !important;
 }
 
 .theme-light header {
-  background-color: rgba(255, 255, 255, 0.9) !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
   border-color: #e4e4e7 !important;
   color: #09090b !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+.theme-light .sticky {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: #e4e4e7 !important;
+}
+
+/* Monochromatic Cards and Containers */
 .theme-light .bg-zinc-950,
 .theme-light .bg-black {
   background-color: #ffffff !important;
   border-color: #e4e4e7 !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  color: #09090b !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
-.theme-light .bg-zinc-900 {
+.theme-light .bg-zinc-900,
+.theme-light .bg-zinc-850 {
   background-color: #f4f4f5 !important;
+  border-color: #e4e4e7 !important;
+  color: #18181b !important;
+}
+
+.theme-light .bg-zinc-900\/60,
+.theme-light .bg-zinc-900\/70,
+.theme-light .bg-zinc-900\/80,
+.theme-light .bg-zinc-900\/90,
+.theme-light .bg-zinc-950\/70,
+.theme-light .bg-zinc-950\/80,
+.theme-light .bg-zinc-950\/90 {
+  background-color: #ffffff !important;
   border-color: #e4e4e7 !important;
 }
 
+/* Monochromatic Typography */
 .theme-light .text-white {
   color: #09090b !important;
 }
 
 .theme-light .text-zinc-200,
 .theme-light .text-zinc-300 {
-  color: #27272a !important;
+  color: #18181b !important;
 }
 
 .theme-light .text-zinc-400 {
+  color: #52525b !important;
+}
+
+.theme-light .text-zinc-500,
+.theme-light .text-zinc-600 {
+  color: #71717a !important;
+}
+
+/* Monochromatic Borders */
+.theme-light .border-zinc-800,
+.theme-light .border-zinc-700,
+.theme-light .border-zinc-750,
+.theme-light .border-zinc-850 {
+  border-color: #e4e4e7 !important;
+}
+
+/* Monochromatic Buttons (Solid black / refined grays) */
+.theme-light button.bg-\[\#ff6b00\],
+.theme-light button.bg-\[\#00ff66\],
+.theme-light .bg-\[\#ff6b00\],
+.theme-light .bg-\[\#00ff66\] {
+  background-color: #09090b !important;
+  color: #ffffff !important;
+  border-color: #09090b !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+}
+
+.theme-light .text-\[\#ff6b00\],
+.theme-light .text-\[\#00ff66\],
+.theme-light .text-cyan-400,
+.theme-light .text-cyan-300 {
+  color: #09090b !important;
+}
+
+/* Monochromatic Badges / Pills */
+.theme-light .bg-\[\#00ff66\]\/10,
+.theme-light .bg-\[\#00ff66\]\/15,
+.theme-light .bg-\[\#00ff66\]\/20,
+.theme-light .bg-\[\#ff6b00\]\/10,
+.theme-light .bg-\[\#ff6b00\]\/15,
+.theme-light .bg-\[\#ff6b00\]\/25,
+.theme-light .bg-cyan-500\/15,
+.theme-light .bg-cyan-950,
+.theme-light .bg-red-950\/80 {
+  background-color: #f4f4f5 !important;
+  border-color: #d4d4d8 !important;
+  color: #09090b !important;
+  box-shadow: none !important;
+}
+
+/* Monochromatic Status Indicators */
+.theme-light .bg-\[\#00ff66\]:not(.brand-dot),
+.theme-light .bg-\[\#ff6b00\],
+.theme-light .bg-cyan-400 {
+  background-color: #09090b !important;
+}
+
+.theme-light .animate-ping:not(.brand-dot) {
+  background-color: #71717a !important;
+}
+
+/* Monochromatic Sparkline Charts */
+.theme-light polyline[stroke="#ff6b00"] {
+  stroke: #09090b !important;
+  stroke-width: 2.2px !important;
+}
+
+.theme-light polyline[stroke="#00ff66"] {
+  stroke: #3f3f46 !important;
+  stroke-width: 2.2px !important;
+}
+
+.theme-light polyline[stroke="#00e5ff"] {
+  stroke: #71717a !important;
+  stroke-width: 2.2px !important;
+}
+
+.theme-light .bg-gradient-to-r {
+  background: linear-gradient(to right, #09090b, #52525b) !important;
+}
+
+/* Subtle monochromatic scrollbars for light theme */
+.theme-light::-webkit-scrollbar-track,
+.theme-light ::-webkit-scrollbar-track {
+  background: #f4f4f5;
+}
+
+.theme-light::-webkit-scrollbar-thumb,
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+}
+
+.theme-light::-webkit-scrollbar-thumb:hover,
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
+/* ========================================================================= */
+/* EXCEPCIÓN PROTEGIDA: EL LOGO Y NOMBRE DE LA MARCA (CRASHING LIVE MONITOR)  */
+/* ========================================================================= */
+.theme-light .app-logo-box {
+  background-color: #000000 !important;
+  border-color: #3f3f46 !important;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.4), 0 0 10px rgba(0, 255, 102, 0.15) !important;
+}
+
+.theme-light .app-logo-box rect {
+  fill: #090d12 !important;
+  stroke: #27272a !important;
+}
+
+.theme-light .app-logo-box path {
+  stroke: #00ff66 !important;
+}
+
+.theme-light .app-logo-box line {
+  stroke: #3f3f46 !important;
+}
+
+.theme-light .app-logo-box circle[fill="#00ff66"] {
+  fill: #00ff66 !important;
+}
+
+.theme-light .app-logo-box circle[fill="#ff6b00"] {
+  fill: #ff6b00 !important;
+}
+
+.theme-light .app-logo-box circle[fill="#00e5ff"] {
+  fill: #00e5ff !important;
+}
+
+.theme-light .app-logo-box circle[fill="#ffffff"] {
+  fill: #ffffff !important;
+}
+
+.theme-light .app-logo-box ellipse[fill="#ff7700"],
+.theme-light .app-logo-box ellipse[fill="#ff9900"] {
+  fill: #ff7700 !important;
+}
+
+.theme-light .app-logo-box ellipse[fill="#ffffff"] {
+  fill: #ffffff !important;
+}
+
+/* Preservar colores del Nombre de la Marca */
+.theme-light .app-brand-name .brand-title {
+  color: #09090b !important;
+}
+
+.theme-light .app-brand-name .brand-accent {
+  color: #ff6b00 !important;
+}
+
+.theme-light .app-brand-name .brand-badge {
+  background-color: rgba(0, 255, 102, 0.12) !important;
+  color: #009944 !important;
+  border-color: rgba(0, 255, 102, 0.5) !important;
+  box-shadow: 0 0 8px rgba(0, 255, 102, 0.25) !important;
+}
+
+.theme-light .app-brand-name .brand-dot {
+  background-color: #009944 !important;
+}
+
+.theme-light .app-brand-name .brand-sub-badge {
+  color: #009944 !important;
+}
+
+.theme-light .app-brand-name .brand-sub-text {
   color: #52525b !important;
 }

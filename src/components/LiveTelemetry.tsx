@@ -17,7 +17,9 @@ import {
   Radio,
   Plus,
   Laptop,
-  Check
+  Check,
+  ChevronDown,
+  Info
 } from 'lucide-react';
 
 interface LiveTelemetryProps {
@@ -46,7 +48,7 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
   const [notification, setNotification] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'detailed' | 'multi-server'>('detailed');
   const [selectedServerIds, setSelectedServerIds] = useState<string[]>(servers.map(s => s.id));
-  const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [activeSubmenu, setActiveSubmenu] = useState<'actions' | 'servers' | 'panels' | null>(null);
 
   // Home Graph Visibility Toggles
   const [visibleGraphs, setVisibleGraphs] = useState({
@@ -132,191 +134,418 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
         </div>
       )}
 
-      {/* HOME DASHBOARD CONTROLS & SERVER SELECTION BAR */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4 shadow-xl">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-zinc-800 pb-3">
+      {/* ========================================================================= */}
+      {/* BARRA SUPERIOR MINIMALISTA HOME: STATUS EN VIVO Y 3 SUBMENÚS DESCRIPTIVOS   */}
+      {/* ========================================================================= */}
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-zinc-950 border border-zinc-800 shadow-xl relative z-20">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+          {/* Identidad de la máquina y métricas clave en una línea limpia */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#ff6b00]">
-              <LayoutGrid className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[#ff6b00] shrink-0">
+              {activeServer.osType.includes('Server') ? (
+                <Server className="w-4 h-4" />
+              ) : (
+                <Laptop className="w-4 h-4" />
+              )}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">
-                  Panel de Monitoreo Home Multiserver
-                </h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30">
-                  {selectedServersList.length} de {servers.length} Servidores
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white font-mono text-sm tracking-tight">{activeServer.name}</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30 font-mono">
+                  {activeServer.latencyMs}ms
+                </span>
+                <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
+                  {activeServer.host}:{activeServer.port}
+                </span>
+                <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800 hidden md:inline">
+                  {activeServer.osType}
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 font-mono">
-                Visualización adaptativa (3 gráficas en pantalla completa, 2 en pantallas medianas y 1 en móviles).
-              </p>
+              <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400 mt-0.5">
+                <span>CPU: <strong className="text-white">{currentMetric.cpu}%</strong></span>
+                <span className="text-zinc-600">•</span>
+                <span>RAM: <strong className="text-white">{currentMetric.ramUsedGB.toFixed(1)} GB</strong> ({currentMetric.ram}%)</span>
+                <span className="text-zinc-600">•</span>
+                <span>Red: <strong className="text-white">{(currentMetric.netInKB / 1024).toFixed(1)} MB/s</strong></span>
+                <span className="text-zinc-600">•</span>
+                <span className="text-zinc-400">{viewMode === 'detailed' ? 'Vista Detalle' : `Malla Multi-Server (${selectedServersList.length})`}</span>
+              </div>
             </div>
           </div>
 
-          {/* Mode Switcher & Admin Config */}
-          <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto">
-            <button
-              onClick={() => setViewMode('detailed')}
-              className={`flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all whitespace-nowrap ${
-                viewMode === 'detailed'
-                  ? 'bg-[#ff6b00] text-black shadow-[0_0_12px_rgba(255,107,0,0.3)]'
-                  : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-              }`}
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              <span>Servidor Seleccionado</span>
-            </button>
-
-            <button
-              onClick={() => setViewMode('multi-server')}
-              className={`flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all whitespace-nowrap ${
-                viewMode === 'multi-server'
-                  ? 'bg-[#00ff66] text-black font-black shadow-[0_0_12px_rgba(0,255,102,0.3)]'
-                  : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5" />
-              <span>Multi-Servidor ({selectedServersList.length})</span>
-            </button>
-
-            <button
-              onClick={() => setShowConfigPanel(!showConfigPanel)}
-              className={`p-2 rounded-lg border font-mono text-xs transition-colors ${
-                showConfigPanel
-                  ? 'bg-zinc-850 text-white border-zinc-600'
-                  : 'bg-zinc-900 text-zinc-400 hover:text-white border-zinc-800'
-              }`}
-              title="Administrar gráficas y servidores visibles"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Server Selection Chips / Pills */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-zinc-500 font-mono text-[11px] uppercase mr-1">Filtrar Servidores:</span>
-          {servers.map((srv) => {
-            const isSelected = selectedServerIds.includes(srv.id);
-            const isCurrentActive = srv.id === currentServerId;
-
-            return (
+          {/* 3 Submenús Plegables Descriptivos (Opciones organizadas y limpias) */}
+          <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto pt-1 lg:pt-0">
+            {/* 1. SUBMENÚ: ACCIONES RÁPIDAS & DIAGNÓSTICO */}
+            <div className="relative flex-1 lg:flex-none">
               <button
-                key={srv.id}
-                onClick={() => {
-                  toggleServerSelection(srv.id);
-                  if (viewMode === 'detailed') onSelectServer(srv);
-                }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs transition-all border ${
-                  isSelected
-                    ? isCurrentActive
-                      ? 'bg-[#00ff66]/15 text-[#00ff66] border-[#00ff66]/50 font-bold shadow-[0_0_8px_rgba(0,255,102,0.2)]'
-                      : 'bg-zinc-900 text-white border-zinc-700 font-medium'
-                    : 'bg-zinc-950 text-zinc-500 border-zinc-850 opacity-60'
+                onClick={() => setActiveSubmenu(activeSubmenu === 'actions' ? null : 'actions')}
+                className={`w-full lg:w-auto flex items-center justify-between lg:justify-start gap-2 px-3 py-2 rounded-xl font-mono text-xs font-bold border transition-all ${
+                  activeSubmenu === 'actions'
+                    ? 'bg-[#ff6b00] text-black border-[#ff6b00] shadow-[0_0_12px_rgba(255,107,0,0.3)]'
+                    : 'bg-zinc-900/90 hover:bg-zinc-850 text-zinc-200 border-zinc-800 hover:border-[#ff6b00]/50'
                 }`}
+                title="Desplegar acciones del servidor: simular picos, purgar memoria y diagnóstico IA"
               >
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    isSelected ? (isCurrentActive ? 'bg-[#00ff66]' : 'bg-[#ff6b00]') : 'bg-zinc-600'
-                  }`}
-                />
-                <span>{srv.name}</span>
-                <span className="text-[10px] text-zinc-400">({srv.latencyMs}ms)</span>
-                {isSelected && <Check className="w-3 h-3 ml-0.5" />}
+                <div className="flex items-center gap-1.5 truncate">
+                  <Zap className="w-3.5 h-3.5 text-[#ff6b00] shrink-0" />
+                  <span className="truncate">Acciones</span>
+                  <span className="text-[10px] px-1 rounded bg-black/40 text-zinc-300 font-normal">3</span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeSubmenu === 'actions' ? 'rotate-180' : ''}`} />
               </button>
-            );
-          })}
 
-          <button
-            onClick={selectAllServers}
-            className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-mono text-[11px] border border-zinc-800"
-          >
-            Todos
-          </button>
+              {activeSubmenu === 'actions' && (
+                <div className="absolute left-0 lg:right-0 lg:left-auto mt-2 w-80 sm:w-96 rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-2xl p-3 z-50 animate-in fade-in font-mono text-xs space-y-2.5">
+                  <div className="border-b border-zinc-850 pb-2 px-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white uppercase text-[11px] flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-[#ff6b00]" /> Herramientas de Mantenimiento
+                      </span>
+                      <button onClick={() => setActiveSubmenu(null)} className="text-zinc-500 hover:text-white text-xs">✕</button>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
+                      <strong>Qué contiene:</strong> Pruebas de estrés temporal de carga, purga inmediata de memoria RAM en espera y diagnóstico automatizado con IA.
+                    </p>
+                  </div>
 
-          <button
-            onClick={onOpenServerManager}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#ff6b00]/10 hover:bg-[#ff6b00]/20 text-[#ff6b00] font-mono text-[11px] font-bold border border-[#ff6b00]/30 transition-colors ml-auto"
-          >
-            <Plus className="w-3 h-3" />
-            <span>Vincular Servidor</span>
-          </button>
-        </div>
+                  <div className="space-y-1.5">
+                    <button
+                      onClick={() => {
+                        onSimulateSpike();
+                        setActiveSubmenu(null);
+                      }}
+                      className="w-full text-left p-2.5 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800 hover:border-[#ff6b00]/50 transition-all flex items-start gap-2.5 group"
+                    >
+                      <Zap className="w-4 h-4 text-[#ff6b00] shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                      <div>
+                        <div className="font-bold text-white text-xs group-hover:text-[#ff6b00] transition-colors">
+                          Simular Pico de Carga
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5">
+                          Genera un pico controlado de CPU y red para probar umbrales y alertas.
+                        </div>
+                      </div>
+                    </button>
 
-        {/* Expandable Home Dashboard Customizer Panel */}
-        {showConfigPanel && (
-          <div className="p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 font-mono text-xs space-y-3 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-white uppercase text-[11px]">
-                Personalizar Gráficas en Vista de Inicio
-              </span>
-              <span className="text-[10px] text-zinc-500">Distribución Responsive 3 &gt; 2 &gt; 1</span>
+                    <button
+                      onClick={() => {
+                        handleQuickFlush();
+                        setActiveSubmenu(null);
+                      }}
+                      className="w-full text-left p-2.5 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800 hover:border-[#00ff66]/50 transition-all flex items-start gap-2.5 group"
+                    >
+                      <RefreshCw className="w-4 h-4 text-[#00ff66] shrink-0 mt-0.5 group-hover:rotate-180 transition-transform duration-500" />
+                      <div>
+                        <div className="font-bold text-white text-xs group-hover:text-[#00ff66] transition-colors">
+                          Purgar Standby Cache (RAM)
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5">
+                          Libera páginas de memoria en espera en Windows, recuperando memoria de inmediato.
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        onRunHealthCheck();
+                        setActiveSubmenu(null);
+                      }}
+                      className="w-full text-left p-2.5 rounded-xl bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800 hover:border-[#ff6b00]/50 transition-all flex items-start gap-2.5 group"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-[#ff6b00] shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-white text-xs group-hover:text-[#ff6b00] transition-colors">
+                          Diagnóstico Heurístico con IA
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5">
+                          Audita registros de incidentes, estabilidad de servicios y correlación de caídas.
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-              <label className="flex items-center gap-2 p-2 rounded bg-black/60 border border-zinc-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleGraphs.cpu}
-                  onChange={(e) => setVisibleGraphs({ ...visibleGraphs, cpu: e.target.checked })}
-                  className="rounded text-[#ff6b00]"
-                />
-                <span className="text-zinc-300 text-[11px]">Gráfica CPU</span>
-              </label>
+            {/* 2. SUBMENÚ: GESTIÓN DE SERVIDORES Y VISTAS */}
+            <div className="relative flex-1 lg:flex-none">
+              <button
+                onClick={() => setActiveSubmenu(activeSubmenu === 'servers' ? null : 'servers')}
+                className={`w-full lg:w-auto flex items-center justify-between lg:justify-start gap-2 px-3 py-2 rounded-xl font-mono text-xs font-bold border transition-all ${
+                  activeSubmenu === 'servers'
+                    ? 'bg-[#00ff66] text-black border-[#00ff66] shadow-[0_0_12px_rgba(0,255,102,0.3)]'
+                    : 'bg-zinc-900/90 hover:bg-zinc-850 text-zinc-200 border-zinc-800 hover:border-[#00ff66]/50'
+                }`}
+                title="Desplegar servidores conectados y cambiar modo de vista"
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <Server className="w-3.5 h-3.5 text-[#00ff66] shrink-0" />
+                  <span className="truncate">Nodos & Red</span>
+                  <span className="text-[10px] px-1 rounded bg-black/40 text-zinc-300 font-normal">{servers.length}</span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeSubmenu === 'servers' ? 'rotate-180' : ''}`} />
+              </button>
 
-              <label className="flex items-center gap-2 p-2 rounded bg-black/60 border border-zinc-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleGraphs.ram}
-                  onChange={(e) => setVisibleGraphs({ ...visibleGraphs, ram: e.target.checked })}
-                  className="rounded text-[#ff6b00]"
-                />
-                <span className="text-zinc-300 text-[11px]">Gráfica RAM</span>
-              </label>
+              {activeSubmenu === 'servers' && (
+                <div className="absolute left-0 lg:right-0 lg:left-auto mt-2 w-80 sm:w-96 rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-2xl p-3 z-50 animate-in fade-in font-mono text-xs space-y-2.5">
+                  <div className="border-b border-zinc-850 pb-2 px-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white uppercase text-[11px] flex items-center gap-1.5">
+                        <Server className="w-3.5 h-3.5 text-[#00ff66]" /> Gestión de Nodos y Red
+                      </span>
+                      <button onClick={() => setActiveSubmenu(null)} className="text-zinc-500 hover:text-white text-xs">✕</button>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
+                      <strong>Qué contiene:</strong> Selector de host activo, alternador entre vista detallada individual o malla multi-server, y acceso para conectar nuevos servidores.
+                    </p>
+                  </div>
 
-              <label className="flex items-center gap-2 p-2 rounded bg-black/60 border border-zinc-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleGraphs.bandwidth}
-                  onChange={(e) => setVisibleGraphs({ ...visibleGraphs, bandwidth: e.target.checked })}
-                  className="rounded text-[#ff6b00]"
-                />
-                <span className="text-zinc-300 text-[11px]">Ancho de Banda</span>
-              </label>
+                  {/* Alternador de Modo de Vista */}
+                  <div className="bg-zinc-900/90 p-1.5 rounded-xl border border-zinc-800 flex items-center gap-1">
+                    <button
+                      onClick={() => setViewMode('detailed')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-center font-bold text-xs transition-all ${
+                        viewMode === 'detailed'
+                          ? 'bg-[#00ff66] text-black shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      Vista Individual
+                    </button>
+                    <button
+                      onClick={() => setViewMode('multi-server')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-center font-bold text-xs transition-all ${
+                        viewMode === 'multi-server'
+                          ? 'bg-[#00ff66] text-black shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      Malla Multi-Server
+                    </button>
+                  </div>
 
-              <label className="flex items-center gap-2 p-2 rounded bg-black/60 border border-zinc-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleGraphs.disk}
-                  onChange={(e) => setVisibleGraphs({ ...visibleGraphs, disk: e.target.checked })}
-                  className="rounded text-[#ff6b00]"
-                />
-                <span className="text-zinc-300 text-[11px]">Disco C:\</span>
-              </label>
+                  {/* Lista de Servidores Vinculados */}
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                    {servers.map((srv) => {
+                      const isCurrent = srv.id === currentServerId;
+                      const isChecked = selectedServerIds.includes(srv.id);
 
-              <label className="flex items-center gap-2 p-2 rounded bg-black/60 border border-zinc-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleGraphs.cores}
-                  onChange={(e) => setVisibleGraphs({ ...visibleGraphs, cores: e.target.checked })}
-                  className="rounded text-[#ff6b00]"
-                />
-                <span className="text-zinc-300 text-[11px]">Matriz Núcleos</span>
-              </label>
+                      return (
+                        <div
+                          key={srv.id}
+                          className={`p-2 rounded-xl border flex items-center justify-between transition-colors ${
+                            isCurrent
+                              ? 'bg-[#00ff66]/10 border-[#00ff66]/40 text-white'
+                              : 'bg-zinc-900/50 border-zinc-850 hover:bg-zinc-900 text-zinc-300'
+                          }`}
+                        >
+                          <button
+                            onClick={() => {
+                              onSelectServer(srv);
+                              if (viewMode === 'detailed') setActiveSubmenu(null);
+                            }}
+                            className="flex items-center gap-2 truncate text-left flex-1 mr-2"
+                          >
+                            <span className={`w-2 h-2 rounded-full ${isCurrent ? 'bg-[#00ff66]' : 'bg-zinc-500'}`} />
+                            <div className="truncate">
+                              <div className="font-bold text-xs truncate flex items-center gap-1.5">
+                                <span>{srv.name}</span>
+                                {isCurrent && <span className="text-[9px] text-[#00ff66] font-normal">(Activo)</span>}
+                              </div>
+                              <div className="text-[10px] text-zinc-400">{srv.host} • {srv.latencyMs}ms</div>
+                            </div>
+                          </button>
 
-              <label className="flex items-center gap-2 p-2 rounded bg-black/60 border border-zinc-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleGraphs.processes}
-                  onChange={(e) => setVisibleGraphs({ ...visibleGraphs, processes: e.target.checked })}
-                  className="rounded text-[#ff6b00]"
-                />
-                <span className="text-zinc-300 text-[11px]">Árbol Procesos</span>
-              </label>
+                          <button
+                            onClick={() => toggleServerSelection(srv.id)}
+                            className={`p-1 rounded border text-[10px] ${
+                              isChecked
+                                ? 'bg-zinc-800 border-zinc-700 text-[#00ff66]'
+                                : 'bg-transparent border-zinc-800 text-zinc-600'
+                            }`}
+                            title="Incluir/Excluir de la comparativa"
+                          >
+                            <Check className={`w-3 h-3 ${isChecked ? 'opacity-100' : 'opacity-20'}`} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pt-1 border-t border-zinc-850 flex items-center justify-between">
+                    <button
+                      onClick={selectAllServers}
+                      className="text-[11px] text-zinc-400 hover:text-white"
+                    >
+                      Seleccionar todos
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveSubmenu(null);
+                        onOpenServerManager();
+                      }}
+                      className="text-[11px] text-[#ff6b00] hover:underline font-bold flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Administrar Servidores</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. SUBMENÚ: PERSONALIZACIÓN DE GRÁFICAS */}
+            <div className="relative flex-1 lg:flex-none">
+              <button
+                onClick={() => setActiveSubmenu(activeSubmenu === 'panels' ? null : 'panels')}
+                className={`w-full lg:w-auto flex items-center justify-between lg:justify-start gap-2 px-3 py-2 rounded-xl font-mono text-xs font-bold border transition-all ${
+                  activeSubmenu === 'panels'
+                    ? 'bg-zinc-200 text-black border-zinc-300 shadow-sm'
+                    : 'bg-zinc-900/90 hover:bg-zinc-850 text-zinc-200 border-zinc-800 hover:border-zinc-700'
+                }`}
+                title="Configurar qué paneles de telemetría mostrar u ocultar"
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
+                  <span className="truncate">Paneles</span>
+                  <span className="text-[10px] px-1 rounded bg-black/40 text-zinc-300 font-normal">
+                    {Object.values(visibleGraphs).filter(Boolean).length}/6
+                  </span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeSubmenu === 'panels' ? 'rotate-180' : ''}`} />
+              </button>
+
+              {activeSubmenu === 'panels' && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-2xl p-3 z-50 animate-in fade-in font-mono text-xs space-y-2.5">
+                  <div className="border-b border-zinc-850 pb-2 px-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white uppercase text-[11px] flex items-center gap-1.5">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-300" /> Paneles Visibles
+                      </span>
+                      <button onClick={() => setActiveSubmenu(null)} className="text-zinc-500 hover:text-white text-xs">✕</button>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
+                      <strong>Qué contiene:</strong> Activa o desactiva de forma individual cada una de las 6 gráficas de telemetría para una visualización más limpia.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <Cpu className="w-3.5 h-3.5 text-[#ff6b00]" />
+                        <div>
+                          <div className="font-bold text-white text-xs">CPU Multi-Core</div>
+                          <div className="text-[10px] text-zinc-500">Carga global, frecuencia y temperatura</div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={visibleGraphs.cpu}
+                        onChange={(e) => setVisibleGraphs({ ...visibleGraphs, cpu: e.target.checked })}
+                        className="rounded text-[#00ff66] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-3.5 h-3.5 text-[#00ff66]" />
+                        <div>
+                          <div className="font-bold text-white text-xs">Memoria RAM</div>
+                          <div className="text-[10px] text-zinc-500">Consumo en GB, porcentaje y caché libre</div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={visibleGraphs.ram}
+                        onChange={(e) => setVisibleGraphs({ ...visibleGraphs, ram: e.target.checked })}
+                        className="rounded text-[#00ff66] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <Wifi className="w-3.5 h-3.5 text-cyan-400" />
+                        <div>
+                          <div className="font-bold text-white text-xs">Ancho de Banda (Red)</div>
+                          <div className="text-[10px] text-zinc-500">Tráfico en vivo IN / OUT y sockets TCP</div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={visibleGraphs.bandwidth}
+                        onChange={(e) => setVisibleGraphs({ ...visibleGraphs, bandwidth: e.target.checked })}
+                        className="rounded text-[#00ff66] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <HardDrive className="w-3.5 h-3.5 text-amber-400" />
+                        <div>
+                          <div className="font-bold text-white text-xs">Disco & Almacenamiento</div>
+                          <div className="text-[10px] text-zinc-500">Lectura/escritura NVMe y salud SMART</div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={visibleGraphs.disk}
+                        onChange={(e) => setVisibleGraphs({ ...visibleGraphs, disk: e.target.checked })}
+                        className="rounded text-[#00ff66] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-3.5 h-3.5 text-[#ff6b00]" />
+                        <div>
+                          <div className="font-bold text-white text-xs">Matriz de Núcleos</div>
+                          <div className="text-[10px] text-zinc-500">Balanceo de carga por cada hilo físico</div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={visibleGraphs.cores}
+                        onChange={(e) => setVisibleGraphs({ ...visibleGraphs, cores: e.target.checked })}
+                        className="rounded text-[#00ff66] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="w-3.5 h-3.5 text-[#00ff66]" />
+                        <div>
+                          <div className="font-bold text-white text-xs">Procesos de Windows</div>
+                          <div className="text-[10px] text-zinc-500">Servicios y procesos de mayor impacto</div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={visibleGraphs.processes}
+                        onChange={(e) => setVisibleGraphs({ ...visibleGraphs, processes: e.target.checked })}
+                        className="rounded text-[#00ff66] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-850 flex items-center justify-between px-1">
+                    <button
+                      onClick={() => setVisibleGraphs({ cpu: true, ram: true, bandwidth: true, disk: true, cores: true, processes: true })}
+                      className="text-[11px] text-[#00ff66] hover:underline"
+                    >
+                      Mostrar Todos (6)
+                    </button>
+                    <button
+                      onClick={() => setVisibleGraphs({ cpu: true, ram: true, bandwidth: true, disk: false, cores: false, processes: false })}
+                      className="text-[11px] text-zinc-400 hover:text-white"
+                    >
+                      Esencial (CPU / RAM / Red)
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -324,57 +553,6 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
       {/* ========================================================================= */}
       {viewMode === 'detailed' && (
         <div className="space-y-6">
-          {/* Active Server Context Bar */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-zinc-950/70 border border-zinc-800">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center text-[#ff6b00]">
-                {activeServer.osType.includes('Server') ? (
-                  <Server className="w-5 h-5" />
-                ) : (
-                  <Laptop className="w-5 h-5" />
-                )}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white font-mono">{activeServer.name}</h3>
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30">
-                    EN LÍNEA ({activeServer.latencyMs}ms)
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 font-mono">
-                  {activeServer.host}:{activeServer.port} • {activeServer.osType} • Python 3.12 Daemon
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                onClick={onSimulateSpike}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-mono transition-colors"
-                title="Simular un pico de carga en este servidor"
-              >
-                <Zap className="w-3.5 h-3.5 text-[#ff6b00]" />
-                <span>Simular Pico</span>
-              </button>
-
-              <button
-                onClick={handleQuickFlush}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-mono transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-[#00ff66]" />
-                <span>Purgar RAM</span>
-              </button>
-
-              <button
-                onClick={onRunHealthCheck}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ff6b00] hover:bg-[#e05e00] text-black font-bold text-xs font-mono transition-colors shadow-[0_0_12px_rgba(255,107,0,0.3)]"
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Diagnóstico IA</span>
-              </button>
-            </div>
-          </div>
-
           {/* MAIN RESPONSIVE GRAPHS GRID: 3 WIDE ON FULLSCREEN, 2 ON TABLET/MEDIUM, 1 ON MOBILE */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* 1. CPU Utilization Graph */}

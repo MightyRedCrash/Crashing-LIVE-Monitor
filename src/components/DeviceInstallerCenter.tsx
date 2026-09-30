@@ -16,8 +16,14 @@ import {
   QrCode,
   Sparkles,
   FileCode,
-  Laptop
+  Laptop,
+  Package,
+  FolderArchive,
+  Play,
+  Eye,
+  Loader2
 } from 'lucide-react';
+import { generateInstallerZip } from '../utils/zipInstallerGenerator';
 
 interface DeviceInstallerCenterProps {
   onOpenWizard: () => void;
@@ -36,6 +42,8 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
 }) => {
   const [selectedComp, setSelectedComp] = useState<'agent' | 'monitor' | 'apk'>('agent');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+  const [showWizardPreview, setShowWizardPreview] = useState(false);
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -55,6 +63,33 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadZip = async () => {
+    setIsGeneratingZip(true);
+    try {
+      const zipBlob = await generateInstallerZip({
+        hostName: currentHost,
+        ipAddress: currentIp,
+        port: currentPort,
+        dbHost: currentIp,
+        dbPort: 5432,
+        dbName: 'crashinglive_db',
+        dbUser: 'postgres'
+      });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CrashingLive_Suite_Installer_${currentHost}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error al generar archivo ZIP:', err);
+    } finally {
+      setIsGeneratingZip(false);
+    }
+  };
+
   const agentInstallCmd = `Set-ExecutionPolicy RemoteSigned -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri "http://${currentIp}:${currentPort}/install-agent.ps1" -OutFile "$env:TEMP\\install-agent.ps1"; & "$env:TEMP\\install-agent.ps1"`;
 
   const monitorDesktopCmd = `Invoke-WebRequest -Uri "http://${currentIp}:${currentPort}/install-monitor.ps1" -OutFile "$env:TEMP\\install-monitor.ps1"; & "$env:TEMP\\install-monitor.ps1"`;
@@ -63,6 +98,135 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* ========================================================================= */}
+      {/* HERO CARD: DESCARGA DEL PAQUETE ZIP COMPLETO CON EL WIZARD INSTALADOR       */}
+      {/* ========================================================================= */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border-2 border-[#00ff66]/50 shadow-[0_0_30px_rgba(0,255,102,0.12)] space-y-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-[#00ff66]/15 border border-[#00ff66]/40 flex items-center justify-center text-[#00ff66] shrink-0 shadow-[0_0_15px_rgba(0,255,102,0.25)]">
+              <FolderArchive className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded text-[10px] font-black font-mono uppercase bg-[#00ff66] text-black shadow-sm">
+                  PAQUETE RECOMENDADO
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-white font-mono uppercase tracking-wide">
+                  Descargar Suite Completa (.ZIP con Wizard Instalador)
+                </h3>
+              </div>
+              <p className="text-xs text-zinc-300 font-mono mt-1 max-w-3xl leading-relaxed">
+                Incluye el asistente ejecutable <strong>INSTALL_WIZARD.bat</strong>. Al descomprimirlo y ejecutarlo como administrador, 
+                <strong className="text-[#00ff66]"> lo primero que muestra es el selector para elegir si este equipo será [1] Agente de Monitoreo, [2] Monitor Central o [3] Ambos</strong>.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full lg:w-auto">
+            <button
+              onClick={() => setShowWizardPreview(!showWizardPreview)}
+              className="flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-mono text-xs font-bold transition-colors"
+              title="Previsualizar qué muestra el Wizard al ejecutarse"
+            >
+              <Eye className="w-4 h-4 text-cyan-400" />
+              <span>{showWizardPreview ? 'Ocultar Pantalla' : 'Ver 1ª Pantalla Wizard'}</span>
+            </button>
+
+            <button
+              onClick={handleDownloadZip}
+              disabled={isGeneratingZip}
+              className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-mono font-black text-xs transition-all shadow-[0_0_20px_rgba(0,255,102,0.4)] disabled:opacity-50"
+            >
+              {isGeneratingZip ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Empaquetando ZIP...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Descargar ZIP con Wizard</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Archivos incluidos en el ZIP */}
+        <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-mono text-zinc-400">
+          <span className="text-zinc-500 uppercase font-bold text-[10px]">Contenido del ZIP:</span>
+          <span className="flex items-center gap-1 text-white">
+            <Play className="w-3 h-3 text-[#00ff66]" /> <strong>INSTALL_WIZARD.bat</strong> (Lanzador)
+          </span>
+          <span className="flex items-center gap-1 text-zinc-300">
+            <FileCode className="w-3 h-3 text-[#ff6b00]" /> Wizard_Instalador.ps1
+          </span>
+          <span className="flex items-center gap-1 text-zinc-300">
+            <FileCode className="w-3 h-3 text-cyan-400" /> agent_daemon.py
+          </span>
+          <span className="flex items-center gap-1 text-zinc-300">
+            <Database className="w-3 h-3 text-amber-400" /> schema.sql
+          </span>
+          <span className="flex items-center gap-1 text-zinc-300">
+            <FileCode className="w-3 h-3 text-zinc-400" /> LEEME_INSTRUCCIONES.txt
+          </span>
+        </div>
+
+        {/* Previsualización interactiva de la 1ª Pantalla del Wizard Instalador */}
+        {showWizardPreview && (
+          <div className="mt-3 p-4 rounded-xl bg-black border border-zinc-700 font-mono text-xs text-zinc-200 animate-in fade-in space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 text-[11px]">
+              <span className="text-[#00ff66] font-bold flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5" /> Consola de Windows al ejecutar "INSTALL_WIZARD.bat"
+              </span>
+              <span className="text-zinc-500">Ejecutado como Administrador</span>
+            </div>
+
+            <div className="space-y-2 text-[11px] text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-zinc-850 whitespace-pre-wrap leading-relaxed">
+              <span className="text-[#00ff66] font-bold block">
+                ========================================================================<br />
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CRASHING LIVE MONITOR - WIZARD DE INSTALACIÓN OFICIAL V2.6<br />
+                ========================================================================
+              </span>
+              <span className="text-zinc-400 block">
+                Servidor Configurado: {currentHost} [{currentIp}:{currentPort}]
+              </span>
+              <span className="text-yellow-400 font-bold block mt-2">
+                ¿QUÉ TIPO DE INSTALACIÓN DESEA REALIZAR EN ESTE EQUIPO?
+              </span>
+              <div className="space-y-1.5 pl-2 text-zinc-200">
+                <div>
+                  <strong className="text-white">[1] AGENTE DE MONITOREO</strong> (Para Servidores / Máquinas Monitoreadas)<br />
+                  <span className="text-zinc-400 text-[10px] pl-4 block">
+                    - Instala el daemon en segundo plano (Python / Windows Service)<br />
+                    - Sensores de CPU, RAM, Red, Discos y Procesos con telemetría en vivo<br />
+                    - Guardrails de ejecución PowerShell para autorreparación de incidentes
+                  </span>
+                </div>
+                <div>
+                  <strong className="text-white">[2] MONITOR CENTRAL / PANEL</strong> (Para la Estación del Administrador)<br />
+                  <span className="text-zinc-400 text-[10px] pl-4 block">
+                    - Configura el Panel de Control Web y Consola de Supervisión multiserver<br />
+                    - Aplica el esquema relacional en PostgreSQL 16 (schema.sql)<br />
+                    - Crea el acceso directo de escritorio "Crashing Live Monitor"
+                  </span>
+                </div>
+                <div>
+                  <strong className="text-white">[3] AMBOS</strong> (Full Stack / Servidor Todo-en-Uno)<br />
+                  <span className="text-zinc-400 text-[10px] pl-4 block">
+                    - Instala tanto el Agente de telemetría como el Monitor Central en esta máquina
+                  </span>
+                </div>
+              </div>
+              <div className="pt-2 text-white font-bold flex items-center gap-2">
+                <span>Seleccione una opción [1, 2 o 3] y presione ENTER:</span>
+                <span className="w-2 h-4 bg-[#00ff66] animate-pulse inline-block" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       {/* Top Banner explaining the 3 Components */}
       <div className="p-5 sm:p-6 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">

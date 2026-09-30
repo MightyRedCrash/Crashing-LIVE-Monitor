@@ -1,0 +1,6 @@
+{
+  "name": "Crashing Live",
+  "description": "Agente autónomo con IA para automatización de Windows Server y Windows 11. Gestión de servicios, archivos, PowerShell seguro, telemetría en tiempo real, PostgreSQL y autodiagnóstico con Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

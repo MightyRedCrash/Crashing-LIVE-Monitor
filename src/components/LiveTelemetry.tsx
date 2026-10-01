@@ -799,24 +799,24 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
           </div>
         </div>
 
-        {/* Banner Conexión Directa Estilo AnyDesk (ID de Agente o Detección Local) */}
+        {/* Banner Conexión Directa Agente ⇄ Monitor (Código de Telemetría) */}
         {onOpenDirectAnydesk && (
-          <div className="p-3 rounded-xl bg-gradient-to-r from-red-950/40 via-zinc-900 to-zinc-950 border border-orange-500/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 font-mono text-xs">
+          <div className="p-3 rounded-xl bg-zinc-950 border border-[#00ff66]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 font-mono text-xs shadow-[0_0_20px_rgba(0,255,102,0.06)]">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-orange-600 text-white flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(255,69,0,0.3)]">
-                <Zap className="w-4 h-4 fill-white" />
+              <div className="w-8 h-8 rounded-lg bg-[#00ff66]/15 border border-[#00ff66]/40 text-[#00ff66] flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(0,255,102,0.2)]">
+                <Zap className="w-4 h-4 fill-[#00ff66]" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-white uppercase text-xs">
-                    Conexión Directa Estilo AnyDesk
+                    Enlace Agente ⇄ Monitor (Código ID estilo AnyDesk)
                   </span>
-                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-red-950 text-red-300 border border-red-800 font-bold uppercase">
-                    ID Remoto o LAN
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-[#00ff66]/20 text-[#00ff66] border border-[#00ff66]/40 font-bold uppercase">
+                    TELEMETRÍA EN VIVO
                   </span>
                 </div>
                 <p className="text-[11px] text-zinc-400 mt-0.5">
-                  Conéctate directamente a cualquier puesto remoto mediante su <strong>ID de Agente</strong> (ej. <code className="text-zinc-300">CL-948-201-143</code>) o mediante <strong>Detección Local Automática en LAN</strong>.
+                  Vincula agentes de telemetría a este monitor en tiempo real mediante su <strong>Código ID de Enlace</strong> (ej. <code className="text-zinc-200">CL-948-201-143</code>) o por <strong>Detección LAN</strong>. <em>(No es escritorio remoto, es transmisión segura de métricas de salud y hardware).</em>
                 </p>
               </div>
             </div>
@@ -824,11 +824,11 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
             <div className="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap">
               <button
                 onClick={onOpenDirectAnydesk}
-                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(255,69,0,0.3)] transition-all"
-                title="Conectar equipo al monitor usando su ID de Agente o Auto-Detección LAN"
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs shadow-[0_0_15px_rgba(0,255,102,0.25)] transition-all"
+                title="Vincular agente remoto al monitor usando su Código ID estilo AnyDesk"
               >
                 <Zap className="w-3.5 h-3.5" />
-                <span>Por ID AnyDesk / LAN</span>
+                <span>Vincular por ID / LAN</span>
               </button>
 
               <button

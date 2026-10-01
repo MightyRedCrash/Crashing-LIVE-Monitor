@@ -23,7 +23,7 @@ import {
   Eye,
   Loader2
 } from 'lucide-react';
-import { generateInstallerZip } from '../utils/zipInstallerGenerator';
+import { generateInstallerZip, downloadNativeExe } from '../utils/zipInstallerGenerator';
 
 interface DeviceInstallerCenterProps {
   onOpenWizard: () => void;
@@ -111,75 +111,85 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-[10px] font-black font-mono uppercase bg-[#00ff66] text-black shadow-sm">
-                  ASISTENTE GRÁFICO (GUI) • EN PROGRAM FILES
+                  INSTALADOR COMPLETO (TODO INCLUIDO • 0 DEPENDENCIAS)
                 </span>
                 <h3 className="text-base sm:text-lg font-black text-white font-mono uppercase tracking-wide">
-                  Descargar Suite Completa (.ZIP con Wizard Gráfico GUI)
+                  Descargar Suite Completa (.EXE y .ZIP)
                 </h3>
               </div>
               <p className="text-xs text-zinc-300 font-mono mt-1 max-w-3xl leading-relaxed">
-                Instala oficialmente en <strong className="text-white">C:\Program Files\CrashingLive</strong>. Al ejecutar <strong>Instalador.vbs</strong> o <strong>Instalador.bat</strong>, <strong className="text-[#00ff66]">abre directamente una ventana de Asistente Gráfico moderno (sin ventana de consola CMD)</strong> con las 4 opciones interactivas, barra de progreso y botón para abrir la carpeta instalada.
+                Instala <strong>todo lo necesario</strong> para que el aplicativo funcione de inmediato en cualquier equipo Windows: binarios nativos autónomos (no requiere instalar Python ni Node), registro del servicio de fondo de Windows, reglas de firewall y accesos directos oficiales en el Escritorio al <strong>Monitor</strong> y al <strong>Agente</strong> en <strong className="text-white">C:\Program Files\Crashing LIVE</strong>.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full lg:w-auto">
+          <div className="flex items-center gap-2.5 w-full lg:w-auto flex-wrap">
             <button
-              onClick={() => setShowWizardPreview(!showWizardPreview)}
-              className="flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-mono text-xs font-bold transition-colors"
-              title="Previsualizar qué muestra el Wizard Gráfico al ejecutarse"
+              onClick={downloadNativeExe}
+              className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-mono font-black text-xs transition-all shadow-[0_0_20px_rgba(0,255,102,0.4)]"
             >
-              <Eye className="w-4 h-4 text-cyan-400" />
-              <span>{showWizardPreview ? 'Ocultar Asistente' : 'Ver Ventana Gráfica GUI'}</span>
+              <Download className="w-4 h-4" />
+              <span>Descargar .EXE Oficial (Todo Incluido)</span>
             </button>
 
             <button
               onClick={handleDownloadZip}
               disabled={isGeneratingZip}
-              className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-mono font-black text-xs transition-all shadow-[0_0_20px_rgba(0,255,102,0.4)] disabled:opacity-50"
+              className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 font-mono font-bold text-xs transition-colors disabled:opacity-50"
             >
               {isGeneratingZip ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Empaquetando ZIP...</span>
+                  <span>Empaquetando...</span>
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
-                  <span>Descargar ZIP con Wizard GUI</span>
+                  <FolderArchive className="w-4 h-4 text-cyan-400" />
+                  <span>Descargar .ZIP Completo</span>
                 </>
               )}
+            </button>
+
+            <button
+              onClick={() => setShowWizardPreview(!showWizardPreview)}
+              className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 font-mono text-xs font-bold transition-colors"
+              title="Previsualizar qué muestra el Wizard Gráfico al ejecutarse"
+            >
+              <Eye className="w-4 h-4 text-cyan-400" />
             </button>
           </div>
         </div>
 
-        {/* Archivos incluidos en el ZIP */}
+        {/* Componentes incluidos para funcionamiento total */}
         <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-mono text-zinc-400">
-          <span className="text-zinc-500 uppercase font-bold text-[10px]">Archivos del Instalador:</span>
+          <span className="text-zinc-500 uppercase font-bold text-[10px]">Componentes Incluidos:</span>
           <span className="flex items-center gap-1 text-[#00ff66] font-bold">
-            <Play className="w-3 h-3 text-[#00ff66]" /> Instalador.vbs (Apertura 100% Gráfica sin ventana CMD)
+            <Play className="w-3 h-3 text-[#00ff66]" /> Instalador_Crashing_LIVE.exe (Wizard Gráfico Todo-en-Uno)
           </span>
-          <span className="flex items-center gap-1 text-white">
-            <Play className="w-3 h-3 text-cyan-400" /> Instalador.bat (Lanzador rápido)
+          <span className="flex items-center gap-1 text-sky-400 font-bold">
+            <Play className="w-3 h-3" /> crashinglive_agent.exe (Agente autónomo de telemetría en tiempo real)
+          </span>
+          <span className="flex items-center gap-1 text-emerald-400 font-bold">
+            <Play className="w-3 h-3" /> crashinglive_monitor.exe (Monitor de escritorio en ventana de software separada + Servidor local)
+          </span>
+          <span className="flex items-center gap-1 text-purple-400 font-bold">
+            <FolderArchive className="w-3 h-3" /> Interfaz Web Completa (Instalada en www/ para funcionamiento 100% autónomo)
           </span>
           <span className="flex items-center gap-1 text-zinc-300">
-            <FileCode className="w-3 h-3 text-cyan-400" /> Wizard_GUI.ps1 (Motor del Asistente Visual Windows Forms)
+            <FileCode className="w-3 h-3 text-cyan-400" /> config.json & accesos directos con logo oficial en el Escritorio
           </span>
           <span className="flex items-center gap-1 text-red-400">
-            <FileCode className="w-3 h-3" /> uninstall.ps1 (Desinstalador en Program Files)
-          </span>
-          <span className="flex items-center gap-1 text-orange-400">
-            <FileCode className="w-3 h-3" /> agent_daemon.py (Telemetría con AnyDesk Beacon)
+            <FileCode className="w-3 h-3" /> uninstall.bat (Desinstalador oficial limpio)
           </span>
         </div>
 
-        {/* Notificación de Integración con Programas de Windows y Program Files */}
-        <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] font-mono text-zinc-300 flex items-start gap-2.5">
+        {/* Notificación de Garantía de Funcionamiento */}
+        <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] font-mono text-zinc-300 flex items-start gap-2.5">
           <ShieldCheck className="w-4 h-4 text-[#00ff66] shrink-0 mt-0.5" />
           <div>
-            <strong className="text-white">Ubicación Oficial: C:\Program Files\CrashingLive</strong>
+            <strong className="text-white">Instalación Autónoma en C:\Program Files\Crashing LIVE:</strong>
             <p className="text-zinc-400 mt-0.5">
-              Todos los binarios, servicios y scripts se guardan en la carpeta oficial del sistema <strong>C:\Program Files\CrashingLive</strong>. Además, queda registrado en <strong>Configuración &gt; Aplicaciones de Windows</strong> para una desinstalación 100% limpia.
+              El instalador configura todo el entorno automáticamente: crea la estructura de carpetas en <strong>C:\Program Files\Crashing LIVE</strong> (o en la ruta personalizada que usted indique), extrae los ejecutables nativos, registra el servicio de fondo <strong>CrashingLiveAgent</strong> con inicio automático en Windows, abre los puertos en el Firewall y genera los accesos directos correspondientes en su Escritorio.
             </p>
           </div>
         </div>

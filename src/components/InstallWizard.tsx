@@ -22,7 +22,7 @@ import {
   FolderArchive,
   Loader2
 } from 'lucide-react';
-import { generateInstallerZip } from '../utils/zipInstallerGenerator';
+import { generateInstallerZip, downloadNativeExe } from '../utils/zipInstallerGenerator';
 
 interface InstallWizardProps {
   config: WizardConfig;
@@ -1072,40 +1072,50 @@ Write-Host "==========================================================" -Foregro
                 </p>
               </div>
 
-              {/* ZIP Package Download Banner */}
-              <div className="p-3.5 rounded-xl bg-[#00ff66]/10 border border-[#00ff66]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-[#00ff66]/20 text-[#00ff66] flex items-center justify-center shrink-0 shadow-sm">
-                    <FolderArchive className="w-5 h-5" />
+              {/* Native .EXE & ZIP Package Download Banner */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border-2 border-[#00ff66]/50 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 shadow-[0_0_20px_rgba(0,255,102,0.15)]">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#00ff66] text-black font-black flex items-center justify-center text-sm shadow-[0_0_12px_rgba(0,255,102,0.4)] shrink-0">
+                    CL
                   </div>
                   <div>
-                    <div className="font-bold text-white text-xs flex items-center gap-2">
-                      <span>Paquete Completo .ZIP con Wizard Instalador</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-[#00ff66] text-black font-black rounded">ASISTENTE GRÁFICO GUI</span>
+                    <div className="font-bold text-white text-xs flex items-center gap-2 flex-wrap">
+                      <span>Instalador Oficial .EXE (Windows - Todo Incluido)</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-[#00ff66] text-black font-black rounded">TODO-EN-UNO</span>
                     </div>
-                    <div className="text-[11px] text-zinc-300 mt-0.5">
-                      Instala en <strong>C:\Program Files\CrashingLive</strong>. Abre directamente el Asistente Gráfico moderno (sin ventana CMD) con las 4 opciones oficiales: <strong className="text-[#00ff66]">[1] Instalar Agente, [2] Instalar Monitor, [3] Instalar Ambos o [4] Desinstalar componentes</strong>.
+                    <div className="text-[11px] text-zinc-300 mt-1 leading-relaxed">
+                      Ejecutable <strong>Instalador_Crashing_LIVE.exe</strong> con logo oficial e idioma español 100% corregido (á, é, í, ó, ú, ñ). Instala <strong>todo lo necesario para que funcione el aplicativo</strong>: monitor de escritorio que se abre en una <strong>ventana de software separada como un programa</strong> (modo standalone), interfaz web completa para funcionamiento autónomo local, agente de telemetría en tiempo real, reglas de Firewall y accesos directos oficiales en el Escritorio al <strong>Monitor</strong> y al <strong>Agente</strong> en <strong>C:\Program Files\Crashing LIVE</strong>.
                     </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={handleDownloadZip}
-                  disabled={isGeneratingZip}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-mono font-black text-xs transition-all shadow-[0_0_15px_rgba(0,255,102,0.3)] shrink-0 disabled:opacity-50"
-                >
-                  {isGeneratingZip ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Generando ZIP...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Descargar ZIP con Wizard</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2 w-full lg:w-auto shrink-0">
+                  <button
+                    onClick={downloadNativeExe}
+                    className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-mono font-black text-xs transition-all shadow-[0_0_15px_rgba(0,255,102,0.3)] shrink-0"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Descargar .EXE Oficial</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownloadZip}
+                    disabled={isGeneratingZip}
+                    className="flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 font-mono font-bold text-xs transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {isGeneratingZip ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>ZIP...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FolderArchive className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Descargar .ZIP</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Code Tab Switcher */}

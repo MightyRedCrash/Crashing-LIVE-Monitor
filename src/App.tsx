@@ -63,7 +63,7 @@ import {
   FolderArchive,
   Play
 } from 'lucide-react';
-import { generateInstallerZip } from './utils/zipInstallerGenerator';
+import { generateInstallerZip, downloadNativeExe } from './utils/zipInstallerGenerator';
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>('dark');
@@ -855,7 +855,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* 2. Menú Hamburguesa dedicado EXCLUSIVAMENTE a la Descarga Directa del ZIP */}
+              {/* 2. Menú Hamburguesa dedicado EXCLUSIVAMENTE a la Descarga Directa del Instalador */}
               <div className="flex items-center gap-2.5">
                 <div className="relative">
                   <button
@@ -868,65 +868,86 @@ export default function App() {
                         ? 'bg-[#00ff66] text-black border-[#00ff66] shadow-[0_0_15px_rgba(0,255,102,0.4)]'
                         : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-700/80 text-white hover:border-[#00ff66]/60'
                     }`}
-                    title="Menú: Descarga del Instalador ZIP"
+                    title="Menú: Descarga del Instalador .EXE"
                   >
                     <Menu className="w-4 h-4 text-[#00ff66]" />
                     <Download className="w-3.5 h-3.5 text-zinc-300" />
-                    <span className="hidden sm:inline">Descargar ZIP</span>
+                    <span className="hidden sm:inline">Instalador .EXE</span>
                     <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${installMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
 
-                  {/* Menú Dropdown: ÚNICA Y EXCLUSIVA OPCIÓN DE DESCARGA ZIP */}
+                  {/* Menú Dropdown: DESCARGA DIRECTA .EXE Y .ZIP */}
                   {installMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-zinc-950/98 backdrop-blur-xl border border-zinc-800 shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 font-mono text-xs space-y-3">
+                    <div className="absolute right-0 mt-2 w-80 sm:w-[420px] rounded-2xl bg-zinc-950/98 backdrop-blur-xl border border-zinc-800 shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 font-mono text-xs space-y-3">
                       <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <FolderArchive className="w-4 h-4 text-[#00ff66]" />
-                          <span className="text-white font-bold uppercase text-[11px] tracking-wide">
-                            Descargar Instalador (.ZIP)
-                          </span>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-6 h-6 rounded-md bg-[#00ff66] text-black font-black flex items-center justify-center text-xs">
+                            CL
+                          </div>
+                          <div>
+                            <span className="text-white font-bold uppercase text-[11px] tracking-wide block">
+                              Instalador Oficial .EXE
+                            </span>
+                            <span className="text-[10px] text-zinc-400">
+                              Crashing LIVE Monitor & Agente
+                            </span>
+                          </div>
                         </div>
-                        <span className="px-2 py-0.5 rounded bg-[#00ff66]/20 text-[#00ff66] text-[10px] font-black">
-                          OFICIAL
+                        <span className="px-2 py-0.5 rounded bg-[#00ff66]/20 text-[#00ff66] text-[10px] font-black border border-[#00ff66]/30">
+                          EJECUTABLE WINDOWS
                         </span>
                       </div>
 
                       <p className="text-[11px] text-zinc-300 leading-relaxed">
-                        Aloja toda la suite en <strong className="text-white">C:\Program Files\CrashingLive</strong>. Incluye el <strong>Asistente Gráfico (GUI)</strong> con las 4 opciones interactivas:
+                        Instala <strong>todo lo necesario</strong> para que el aplicativo funcione de inmediato en cualquier equipo Windows: ejecutables nativos autónomos (no requiere instalar Python ni Node), registro del servicio de fondo, reglas de cortafuegos y accesos directos oficiales en <strong>C:\Program Files\Crashing LIVE</strong> (o en la carpeta que usted especifique).
                       </p>
 
-                      <div className="space-y-1.5 text-[10px] text-zinc-400 bg-zinc-900/70 p-2.5 rounded-xl border border-zinc-850">
-                        <div className="flex items-center gap-1.5 text-zinc-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b00]" /> <strong>1. Instalar Agente</strong> (daemon de telemetría)
+                      <div className="space-y-1.5 text-[10px] text-zinc-300 bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800">
+                        <strong className="text-white block text-[11px] mb-1">Accesos directos en el Escritorio según su elección:</strong>
+                        <div className="flex items-center gap-1.5 text-sky-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                          <span><strong>Ambos instalados:</strong> Genera acceso al <em>Monitor</em> y al <em>Agente</em>.</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-zinc-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66]" /> <strong>2. Instalar Monitor</strong> (consola web & postgres)
+                        <div className="flex items-center gap-1.5 text-zinc-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b00]" />
+                          <span><strong>Solo Agente:</strong> Genera únicamente el acceso a <em>Crashing LIVE Agente</em>.</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-zinc-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400" /> <strong>3. Instalar Ambos</strong> (servidor todo-en-uno)
-                        </div>
-                        <div className="flex items-center gap-1.5 text-red-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> <strong>4. Desinstalar componentes</strong> (limpieza completa)
+                        <div className="flex items-center gap-1.5 text-zinc-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66]" />
+                          <span><strong>Solo Monitor:</strong> Genera únicamente el acceso a <em>Crashing LIVE Monitor</em>.</span>
                         </div>
                       </div>
 
+                      {/* Botón Principal: Descargar .EXE Nativo */}
+                      <button
+                        onClick={() => {
+                          downloadNativeExe();
+                          setInstallMenuOpen(false);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs font-mono transition-all shadow-[0_0_20px_rgba(0,255,102,0.4)]"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>DESCARGAR INSTALADOR (.EXE OFICIAL)</span>
+                      </button>
+
+                      {/* Botón Secundario: Descargar Paquete ZIP */}
                       <button
                         onClick={() => {
                           handleDownloadZip();
                           setInstallMenuOpen(false);
                         }}
                         disabled={isDownloadingZip}
-                        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs font-mono transition-all shadow-[0_0_20px_rgba(0,255,102,0.4)] disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-700 text-[11px] font-mono transition-colors disabled:opacity-50"
                       >
                         {isDownloadingZip ? (
                           <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             <span>Empaquetando ZIP...</span>
                           </>
                         ) : (
                           <>
-                            <Download className="w-4 h-4" />
-                            <span>DESCARGAR ARCHIVO ZIP AHORA</span>
+                            <FolderArchive className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Descargar Paquete ZIP (Incluye .EXE y Scripts)</span>
                           </>
                         )}
                       </button>

@@ -210,16 +210,16 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* AnyDesk Direct Connect Button */}
+          {/* Agent-to-Monitor Telemetry Link Button (AnyDesk style ID) */}
           {onOpenDirectAnydesk && (
             <button
               onClick={onOpenDirectAnydesk}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-600/20 to-orange-600/20 hover:from-red-600/35 hover:to-orange-600/35 border border-orange-500/50 text-orange-400 font-mono text-xs font-bold transition-all shadow-[0_0_12px_rgba(255,69,0,0.2)]"
-              title="Conexión Directa estilo AnyDesk por ID de Agente o Detección Local en LAN"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#00ff66]/15 hover:bg-[#00ff66]/25 border border-[#00ff66]/40 text-[#00ff66] font-mono text-xs font-bold transition-all shadow-[0_0_12px_rgba(0,255,102,0.2)]"
+              title="Enlace Agente ⇄ Monitor: Vincular flujo de telemetría y métricas por Código ID estilo AnyDesk (No es escritorio remoto)"
             >
-              <Zap className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
-              <span className="hidden xl:inline">AnyDesk Direct Connect</span>
-              <span className="xl:hidden">AnyDesk</span>
+              <Zap className="w-3.5 h-3.5 text-[#00ff66] fill-[#00ff66]" />
+              <span className="hidden xl:inline">Enlace Agente ⇄ Monitor</span>
+              <span className="xl:hidden">Enlace ID</span>
             </button>
           )}
 
@@ -436,10 +436,10 @@ export const Header: React.FC<HeaderProps> = ({
                   setMobileMenuOpen(false);
                   onOpenDirectAnydesk();
                 }}
-                className="p-2.5 rounded-lg bg-orange-950/40 border border-orange-600/40 text-left flex items-center gap-2 text-orange-400 font-bold"
+                className="p-2.5 rounded-lg bg-[#00ff66]/10 border border-[#00ff66]/30 text-left flex items-center gap-2 text-[#00ff66] font-bold"
               >
-                <Zap className="w-4 h-4 text-orange-400 fill-orange-400" />
-                <span>AnyDesk Direct Connect</span>
+                <Zap className="w-4 h-4 text-[#00ff66] fill-[#00ff66]" />
+                <span>Enlace Agente ⇄ Monitor (ID AnyDesk)</span>
               </button>
             )}
             <button

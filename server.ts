@@ -2,6 +2,8 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 
@@ -451,6 +453,36 @@ app.post('/api/telemetry/report', (req, res) => {
 
   externalAgentReports.set(hostname, report);
   return res.json({ success: true, message: `Report recorded for agent ${hostname}` });
+});
+
+// API: Download Native Windows .EXE Installer
+app.get('/api/installer/download-exe', (req, res) => {
+  try {
+    const candidatePaths = [
+      path.resolve('/installer_build', 'Instalador_Crashing_LIVE.exe'),
+      path.resolve(__dirname, 'bin', 'Instalador_Crashing_LIVE.exe'),
+      path.resolve('bin', 'Instalador_Crashing_LIVE.exe'),
+      path.resolve('installer_assets', 'Instalador_CrashingLIVE.exe')
+    ];
+    let exePath = '';
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        exePath = p;
+        break;
+      }
+    }
+    if (!exePath) {
+      return res.status(404).json({ error: 'Instalador .exe no disponible.' });
+    }
+    
+    res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
+    res.setHeader('Content-Disposition', 'attachment; filename="Instalador_Crashing_LIVE.exe"');
+    const fileStream = fs.createReadStream(exePath);
+    return fileStream.pipe(res);
+  } catch (err: any) {
+    console.error('Error serving installer .exe:', err);
+    return res.status(500).json({ error: 'Failed to serve executable: ' + err.message });
+  }
 });
 
 // Production static file serving or Dev Vite middlewares

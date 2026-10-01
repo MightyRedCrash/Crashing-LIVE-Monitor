@@ -17,16 +17,15 @@ import {
   Lock, 
   Maximize2, 
   Minimize2, 
-  Sliders, 
-  MousePointer, 
-  FolderDown, 
   ArrowRight,
   Radio,
   FileCode,
   HardDrive,
   Cpu,
   Activity,
-  Send
+  Send,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 
 interface DirectAnydeskModalProps {
@@ -44,12 +43,11 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
   onSelectServer,
   onAddServer,
 }) => {
-  // My Local Monitor ID
+  // ID de este Monitor Central
   const myMonitorId = 'CL-104-582-901';
 
   // Remote Target ID input
   const [remoteIdInput, setRemoteIdInput] = useState('');
-  const [remotePinInput, setRemotePinInput] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'connect' | 'discovery' | 'session'>('connect');
 
@@ -57,25 +55,32 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
   const [isScanningLan, setIsScanningLan] = useState(false);
   const [scanProgress, setScanProgress] = useState(100);
 
-  // Active Session State
+  // Active Session State (Flujo de Telemetría Agente -> Monitor)
   const [session, setSession] = useState<AnyDeskRemoteSession | null>(null);
   const [connectingStep, setConnectingStep] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 340, y: 220 });
-  const [activeRemoteApp, setActiveRemoteApp] = useState<'powershell' | 'taskmgr' | 'explorer'>('powershell');
-  const [remoteCommandInput, setRemoteCommandInput] = useState('');
-  const [remoteTerminalLogs, setRemoteTerminalLogs] = useState<string[]>([
-    'Microsoft Windows [Versión 10.0.20348.2407]',
-    '(c) Microsoft Corporation. Todos los derechos reservados.',
-    '',
-    'PS C:\\CrashingLive> Get-Service -Name CrashingLiveDaemon',
-    'Status   Name               DisplayName',
-    '------   ----               -----------',
-    'Running  CrashingLiveDaemon Crashing Live Autonomous AI Daemon',
-    '',
-    'PS C:\\CrashingLive> [System.Net.Dns]::GetHostByName($env:computerName).AddressList.IPAddressToString',
-    '192.168.1.140',
-    ''
+
+  // Métricas dinámicas en vivo del Agente vinculado
+  const [liveMetrics, setLiveMetrics] = useState({
+    cpu: 22.4,
+    ram: 58.1,
+    ramUsedGB: 9.3,
+    ramTotalGB: 16.0,
+    diskReadMB: 4.8,
+    diskWriteMB: 2.1,
+    netInKB: 840,
+    netOutKB: 320,
+    uptime: '14d 6h 32m',
+    servicesRunning: 142
+  });
+
+  // Simulated Telemetry logs
+  const [telemetryLogs, setTelemetryLogs] = useState<string[]>([
+    'Enlace P2P TLS 1.3 establecido.',
+    'Agente de telemetría sincronizado en puerto 8443.',
+    'Recibiendo telemetría continua de hardware cada 2s...',
+    'CPU: 22.4% | RAM: 58.1% (9.3 GB / 16.0 GB)',
+    'Discos: C: 45% libre | Red: 840 KB/s IN, 320 KB/s OUT'
   ]);
 
   // Detected Local Servers on LAN
@@ -146,6 +151,27 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     },
   ]);
 
+  // Actualizar métricas dinámicas si hay sesión activa
+  useEffect(() => {
+    if (!session) return;
+    const timer = setInterval(() => {
+      setLiveMetrics(prev => {
+        const nextCpu = Math.max(8, Math.min(95, prev.cpu + (Math.random() * 8 - 4)));
+        const nextRam = Math.max(30, Math.min(85, prev.ram + (Math.random() * 2 - 1)));
+        return {
+          ...prev,
+          cpu: Number(nextCpu.toFixed(1)),
+          ram: Number(nextRam.toFixed(1)),
+          netInKB: Math.floor(600 + Math.random() * 600),
+          netOutKB: Math.floor(200 + Math.random() * 300),
+          diskReadMB: Number((2 + Math.random() * 4).toFixed(1)),
+          diskWriteMB: Number((1 + Math.random() * 3).toFixed(1))
+        };
+      });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [session]);
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     setNotification(`${label} copiado al portapapeles.`);
@@ -169,7 +195,6 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     }, 250);
   };
 
-  // Formateador de ID estilo AnyDesk (ej: CL-849-201-143 o 849 201 143)
   const handleIdInputChange = (val: string) => {
     const clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
     setRemoteIdInput(clean);
@@ -185,18 +210,18 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     );
 
     const isLocal = !!foundLocal;
-    const targetName = foundLocal?.name || serverObj?.name || `Equipo Remoto (${idToUse})`;
+    const targetName = foundLocal?.name || serverObj?.name || `Agente Vinculado (${idToUse})`;
     const targetIp = foundLocal?.ip || serverObj?.host || '192.168.1.140';
     const targetOs = foundLocal?.osType || serverObj?.osType || 'Windows Server 2022';
     const targetLatency = isLocal ? (foundLocal?.latencyMs || 2) : 18;
 
     setActiveTab('session');
-    setConnectingStep('Buscando Agente en red local y relay AnyDesk...');
+    setConnectingStep('Buscando Agente en red local y relay de enlace AnyDesk...');
 
     setTimeout(() => {
-      setConnectingStep(isLocal ? 'Agente detectado en red local (192.168.1.0/24)...' : 'Negociando túnel P2P TLS 1.3 con ID de Agente...');
+      setConnectingStep(isLocal ? 'Agente detectado en red local (192.168.1.0/24)...' : 'Negociando túnel seguro TLS con ID de Agente...');
       setTimeout(() => {
-        setConnectingStep('Autenticación y guardrails de seguridad aceptados...');
+        setConnectingStep('Validando canal de telemetría y salud del host...');
         setTimeout(() => {
           setConnectingStep(null);
           setSession({
@@ -211,9 +236,9 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
             latencyMs: targetLatency,
             quality: 'HIGH',
             sessionStartTime: new Date().toLocaleTimeString(),
-            keyboardCaptured: true,
-            mouseCaptured: true,
-            viewOnly: false,
+            keyboardCaptured: false,
+            mouseCaptured: false,
+            viewOnly: true,
           });
 
           // Sincronizar o crear en la lista de servidores si no existe
@@ -233,45 +258,17 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
             });
           }
 
-          setNotification(`Conectado con éxito a ${targetName} vía ${isLocal ? 'Detección LAN Local' : 'Túnel por ID de Agente'}.`);
+          setNotification(`Agente ${targetName} vinculado exitosamente al Monitor Central.`);
           setTimeout(() => setNotification(null), 4000);
-        }, 600);
-      }, 700);
-    }, 600);
+        }, 500);
+      }, 600);
+    }, 500);
   };
 
   const handleDisconnect = () => {
     setSession(null);
     setActiveTab('connect');
-    setNotification('Sesión AnyDesk finalizada correctamente.');
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleSendRemoteCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!remoteCommandInput.trim()) return;
-
-    const cmd = remoteCommandInput.trim();
-    const newLogs = [...remoteTerminalLogs, `PS C:\\CrashingLive> ${cmd}`];
-
-    if (cmd.toLowerCase().includes('help') || cmd.toLowerCase().includes('ayuda')) {
-      newLogs.push('Comandos disponibles: Get-Process, Get-Service, Restart-Service, ping, hostname, ipconfig');
-    } else if (cmd.toLowerCase().includes('hostname')) {
-      newLogs.push(session?.serverName || 'WINSRV-2022-DC01');
-    } else if (cmd.toLowerCase().includes('ipconfig')) {
-      newLogs.push(`Adaptador de Ethernet Ethernet0:\n   Dirección IPv4. . . . . . . . . . . : ${session?.ipAddress || '192.168.1.140'}\n   Máscara de subred . . . . . . . . . : 255.255.255.0\n   Puerta de enlace predeterminada . . : 192.168.1.1`);
-    } else if (cmd.toLowerCase().includes('get-process')) {
-      newLogs.push('Handles  NPM(K)    PM(K)      WS(K)     CPU(s)     Id ProcessName\n-------  ------    -----      -----     ------     -- -----------\n    420      24   124500     145000       1.24   4912 agent_daemon\n    890      45   486200     520000       4.12   1204 postgres\n    310      18    84000      92000       0.85   3190 powershell');
-    } else {
-      newLogs.push(`[OK] Comando '${cmd}' ejecutado en ${session?.serverName}. Guardrail validado.`);
-    }
-
-    setRemoteTerminalLogs(newLogs);
-    setRemoteCommandInput('');
-  };
-
-  const sendMacro = (macroName: string) => {
-    setNotification(`Macro enviado a ${session?.serverName}: [${macroName}]`);
+    setNotification('Enlace de telemetría con el Agente finalizado.');
     setTimeout(() => setNotification(null), 3000);
   };
 
@@ -281,24 +278,24 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
         isFullscreen ? 'h-full max-w-none rounded-none border-none' : 'max-w-5xl max-h-[92vh]'
       }`}>
         {/* ========================================================================= */}
-        {/* 1. TOP HEADER ESTILO ANYDESK                                              */}
+        {/* 1. TOP HEADER                                                             */}
         {/* ========================================================================= */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-red-600 to-orange-600 text-white flex items-center justify-center shadow-[0_0_15px_rgba(255,69,0,0.4)] shrink-0">
-              <Zap className="w-4 h-4 fill-white" />
+            <div className="w-9 h-9 rounded-xl bg-[#00ff66]/15 border border-[#00ff66]/30 text-[#00ff66] flex items-center justify-center shadow-[0_0_15px_rgba(0,255,102,0.25)] shrink-0">
+              <Zap className="w-5 h-5 fill-[#00ff66]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-black text-sm text-white tracking-wide">
-                  CRASHING LIVE DIRECT CONNECT
+                  CRASHING LIVE • ENLACE AGENTE ⇄ MONITOR
                 </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-400 border border-red-800 uppercase">
-                  Estilo AnyDesk P2P
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00ff66]/15 text-[#00ff66] border border-[#00ff66]/30 uppercase">
+                  Código ID de Enlace
                 </span>
               </div>
               <p className="text-[10px] text-zinc-400">
-                Conexión directa por ID de Agente o Auto-Detección Local en LAN.
+                Conecta agentes de telemetría a este monitor central en tiempo real.
               </p>
             </div>
           </div>
@@ -311,34 +308,34 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                   onClick={() => setActiveTab('connect')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     activeTab === 'connect'
-                      ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-sm'
+                      ? 'bg-[#00ff66] text-black shadow-sm'
                       : 'text-zinc-400 hover:text-white'
                   }`}
                 >
-                  Conexión por ID
+                  Vincular por ID
                 </button>
                 <button
                   onClick={() => {
                     setActiveTab('discovery');
                     handleScanLan();
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                     activeTab === 'discovery'
-                      ? 'bg-[#00ff66] text-black shadow-[0_0_12px_rgba(0,255,102,0.3)]'
+                      ? 'bg-[#00ff66] text-black shadow-sm'
                       : 'text-zinc-400 hover:text-white'
                   }`}
                 >
                   <Wifi className="w-3.5 h-3.5" />
-                  <span>Detección Local ({localDetectedAgents.length})</span>
+                  <span>Detección Local (LAN)</span>
                 </button>
               </div>
             )}
 
             {session && (
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 rounded-lg bg-[#00ff66]/15 border border-[#00ff66]/30 text-[#00ff66] text-xs font-bold flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-800 text-emerald-400 text-xs font-mono">
                   <span className="w-2 h-2 rounded-full bg-[#00ff66] animate-pulse" />
-                  <span>Conectado: {session.serverName} ({session.latencyMs}ms)</span>
+                  <span>Agente Enlazado: {session.serverName} ({session.latencyMs}ms)</span>
                 </span>
                 <button
                   onClick={() => {
@@ -360,10 +357,10 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                     onClose();
                   }}
                   className="px-3 py-1.5 rounded-lg bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs shadow-sm transition-colors flex items-center gap-1"
-                  title="Abrir y enfocar este equipo en el Monitor de Estado principal"
+                  title="Abrir y enfocar este equipo en el Monitor principal"
                 >
                   <Activity className="w-3.5 h-3.5" />
-                  <span>Ver en Monitor de Estado</span>
+                  <span>Ver en Monitor Principal</span>
                 </button>
                 <button
                   onClick={() => setIsFullscreen(!isFullscreen)}
@@ -376,7 +373,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                   onClick={handleDisconnect}
                   className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-md transition-colors"
                 >
-                  Desconectar
+                  Desconectar Enlace
                 </button>
               </div>
             )}
@@ -388,6 +385,14 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
               <X className="w-4 h-4" />
             </button>
           </div>
+        </div>
+
+        {/* Notificación de Propósito del Enlace (Aclaración explícita) */}
+        <div className="px-4 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center gap-2 text-[11px] text-zinc-300">
+          <Info className="w-4 h-4 text-[#00ff66] shrink-0" />
+          <span>
+            <strong>Propósito del Enlace:</strong> La conexión por código ID estilo AnyDesk permite conectar agentes remotos al monitor central para recibir telemetría continua de hardware, alertas y estado de servicios. <em>(No es para tomar control remoto de escritorio ni pantalla).</em>
+          </span>
         </div>
 
         {/* Notificaciones emergentes */}
@@ -405,28 +410,25 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
         {/* 2. CONTENIDO PRINCIPAL SEGÚN LA PESTAÑA ACTIVA                            */}
         {/* ========================================================================= */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          {/* ----------------------------------------------------------------------- */}
-          {/* TAB 1: CONEXIÓN POR ID DE AGENTE (ESTILO ANYDESK)                       */}
-          {/* ----------------------------------------------------------------------- */}
+          {/* TAB 1: CONEXIÓN POR ID DE AGENTE */}
           {activeTab === 'connect' && !session && (
             <div className="space-y-6">
-              {/* Bloque Superior: Mi Puesto vs Otro Puesto */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 {/* Panel 1: Su Puesto (ID de Este Monitor) */}
                 <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-2">
-                        <Monitor className="w-4 h-4 text-[#00ff66]" /> Su Puesto (Este Monitor)
+                        <Monitor className="w-4 h-4 text-[#00ff66]" /> Su Puesto (Este Monitor Central)
                       </span>
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/20">
-                        ONLINE • LISTO
+                        MONITOR LISTO
                       </span>
                     </div>
 
                     <div className="mt-4 p-4 rounded-xl bg-black border border-zinc-800 space-y-2">
                       <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">
-                        Su Dirección / ID de Agente:
+                        Dirección / ID de Este Monitor:
                       </span>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-2xl sm:text-3xl font-black font-mono tracking-wider text-white">
@@ -445,131 +447,84 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                   </div>
 
                   <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    Cualquier agente configurado puede conectarse a este centro de mando utilizando este ID o a través de la red local.
+                    Los agentes de telemetría configurados en servidores o puestos remotos pueden emitir sus métricas directamente a este ID sin necesidad de configuración en routers ni cortafuegos.
                   </p>
                 </div>
 
-                {/* Panel 2: Otro Puesto (Conectar a un Equipo Remoto por ID) */}
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-950 border-2 border-red-500/30 shadow-[0_0_20px_rgba(255,69,0,0.1)] space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white font-bold uppercase tracking-wider flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-orange-500" /> Conectar a Otro Puesto
+                {/* Panel 2: Conectar a Agente Remoto */}
+                <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-4 flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-[#00ff66]" /> Vincular Agente Remoto
                     </span>
-                    <span className="text-[10px] text-zinc-400">
-                      ID de Agente (AnyDesk Style)
-                    </span>
+
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <label className="text-[11px] text-zinc-400 mb-1.5 block">
+                          Ingrese el ID del Agente Remoto:
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={remoteIdInput}
+                            onChange={(e) => handleIdInputChange(e.target.value)}
+                            placeholder="Ej: CL-948-201-143 o 948 201 143"
+                            className="w-full px-4 py-3 rounded-xl bg-black border border-zinc-700 text-base font-mono font-bold tracking-wider text-white placeholder-zinc-600 focus:outline-none focus:border-[#00ff66]"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleStartConnection(remoteIdInput)}
+                        disabled={!remoteIdInput.trim()}
+                        className="w-full py-3 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] disabled:opacity-40 disabled:pointer-events-none text-black font-black text-sm transition-all shadow-[0_0_20px_rgba(0,255,102,0.3)] flex items-center justify-center gap-2"
+                      >
+                        <Zap className="w-4 h-4" />
+                        <span>Vincular y Recibir Telemetría en Vivo</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-[11px] text-zinc-300 font-bold block mb-1">
-                        Ingrese el ID del Agente Remoto:
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={remoteIdInput}
-                          onChange={(e) => handleIdInputChange(e.target.value)}
-                          placeholder="Ej: CL-948-201-143 o 849201143"
-                          className="w-full pl-3 pr-10 py-3 rounded-xl bg-black border-2 border-zinc-700 focus:border-red-500 text-lg font-mono text-white tracking-widest placeholder:text-zinc-600 focus:outline-none transition-all uppercase"
-                        />
-                        <Zap className="w-4 h-4 text-orange-400 absolute right-3.5 top-3.5 pointer-events-none" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-zinc-400 block mb-1">
-                        PIN o Contraseña Desatendida (Opcional si tiene auto-aprobación):
-                      </label>
-                      <input
-                        type="password"
-                        value={remotePinInput}
-                        onChange={(e) => setRemotePinInput(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full px-3 py-2 rounded-xl bg-black border border-zinc-800 focus:border-red-500 text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none"
-                      />
-                    </div>
-
-                    <button
-                      onClick={() => handleStartConnection(remoteIdInput)}
-                      disabled={!remoteIdInput.trim()}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold text-sm shadow-[0_0_20px_rgba(255,69,0,0.35)] disabled:opacity-40 disabled:pointer-events-none transition-all"
-                    >
-                      <Zap className="w-4 h-4" />
-                      <span>Conectar de Manera Directa</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
+                  <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 text-[11px] text-zinc-400 space-y-1">
+                    <span className="font-bold text-white block">¿Cómo obtener el ID del Agente?</span>
+                    <span>El ID se genera al instalar el Agente Host en el equipo remoto y se visualiza en su archivo <code>config.json</code> o en el acceso directo del escritorio.</span>
                   </div>
                 </div>
               </div>
 
-              {/* Banner de Detección Local Rápida: "A menos que lo detecte localmente" */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-zinc-950 border border-[#00ff66]/30 shadow-lg space-y-3">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-850 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-[#00ff66]/15 border border-[#00ff66]/30 text-[#00ff66] flex items-center justify-center shrink-0">
-                      <Wifi className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-white text-xs uppercase flex items-center gap-2">
-                        <span>Equipos Detectados en Red Local (Auto-Discovery)</span>
-                        <span className="px-2 py-0.2 rounded text-[10px] bg-[#00ff66] text-black font-black">
-                          {localDetectedAgents.length} ENCONTRADOS
-                        </span>
-                      </h4>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">
-                        No requiere ingresar el ID si el equipo está en la misma subred LAN: conexión en 1 clic.
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleScanLan}
-                    disabled={isScanningLan}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-bold text-zinc-200 transition-colors shrink-0"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isScanningLan ? 'animate-spin text-[#00ff66]' : ''}`} />
-                    <span>{isScanningLan ? 'Escaneando LAN...' : 'Volver a Escanear'}</span>
-                  </button>
+              {/* Lista de Agentes Detectados Recientemente */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                    <Laptop className="w-4 h-4 text-[#00ff66]" /> Agentes de Telemetría Detectados en LAN
+                  </span>
+                  <span className="text-[11px] text-zinc-500">Auto-descubrimiento en tiempo real</span>
                 </div>
 
-                {/* Listado de Equipos Detectados en Red Local */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {localDetectedAgents.map((agent) => (
                     <div
                       key={agent.id}
-                      className="p-3.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-[#00ff66]/50 transition-all flex flex-col justify-between group"
+                      className="p-3.5 rounded-xl bg-zinc-900/40 border border-zinc-800 hover:border-[#00ff66]/50 transition-all flex flex-col justify-between space-y-2 group"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-2 rounded-lg bg-black border border-zinc-800 text-[#00ff66]">
-                            {agent.osType.includes('Server') ? <Server className="w-4 h-4" /> : <Laptop className="w-4 h-4" />}
-                          </div>
-                          <div>
-                            <span className="font-bold text-white text-xs block group-hover:text-[#00ff66] transition-colors">
-                              {agent.name}
-                            </span>
-                            <span className="text-[10px] text-zinc-400 block font-mono">
-                              IP: {agent.ip} • ID: <strong className="text-zinc-200">{agent.agentId}</strong>
-                            </span>
-                          </div>
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-white text-xs truncate">{agent.name}</span>
+                          <span className="text-[10px] font-mono text-[#00ff66]">{agent.latencyMs}ms</span>
                         </div>
-
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#00ff66]/10 text-[#00ff66] border border-[#00ff66]/30 shrink-0">
-                          {agent.latencyMs}ms LAN
+                        <span className="text-[10px] text-zinc-400 font-mono block mt-1">
+                          ID: <strong className="text-zinc-200">{agent.agentId}</strong>
                         </span>
+                        <span className="text-[10px] text-zinc-500 block truncate">{agent.osType}</span>
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-zinc-500">{agent.osType}</span>
-                        <button
-                          onClick={() => handleStartConnection(agent.agentId, agent)}
-                          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs transition-all shadow-[0_0_12px_rgba(0,255,102,0.25)]"
-                        >
-                          <Zap className="w-3 h-3" />
-                          <span>Conectar Local</span>
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleStartConnection(agent.agentId, agent)}
+                        className="w-full mt-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-[#00ff66] text-zinc-200 hover:text-black font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Zap className="w-3 h-3" />
+                        <span>Vincular al Monitor</span>
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -577,9 +532,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
             </div>
           )}
 
-          {/* ----------------------------------------------------------------------- */}
-          {/* TAB 2: DETECCIÓN LOCAL RADAR & ESCÁNER LAN                               */}
-          {/* ----------------------------------------------------------------------- */}
+          {/* TAB 2: DETECCIÓN LOCAL EN RED */}
           {activeTab === 'discovery' && !session && (
             <div className="space-y-4">
               <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
@@ -590,7 +543,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                       <span>Escáner de Red Local (Broadcast / mDNS)</span>
                     </h3>
                     <p className="text-xs text-zinc-400 mt-0.5">
-                      Subred activa: <strong className="text-white">192.168.1.0/24</strong> • Escaneando agentes en segundo plano
+                      Subred activa: <strong className="text-white">192.168.1.0/24</strong> • Buscando balizas de agentes en segundo plano
                     </p>
                   </div>
 
@@ -600,31 +553,23 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs transition-all shadow-[0_0_15px_rgba(0,255,102,0.2)]"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isScanningLan ? 'animate-spin' : ''}`} />
-                    <span>Escanear Ahora</span>
+                    <span>Escanear Red Ahora</span>
                   </button>
                 </div>
 
-                {/* Radar Progress Bar */}
                 <div className="space-y-1">
                   <div className="flex justify-between text-[11px] text-zinc-400">
                     <span>Estado del Escáner:</span>
-                    <span>{isScanningLan ? `Escaneando puertos 8443 / 8444... ${scanProgress}%` : 'Escaneo Completado'}</span>
+                    <span>{isScanningLan ? `Escaneando puertos de telemetría 8443 / 8444... ${scanProgress}%` : 'Escaneo Completado'}</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-zinc-900 overflow-hidden">
-                    <div
-                      className="h-full bg-[#00ff66] transition-all duration-300"
-                      style={{ width: `${scanProgress}%` }}
-                    />
+                    <div className="h-full bg-[#00ff66] transition-all duration-300" style={{ width: `${scanProgress}%` }} />
                   </div>
                 </div>
 
-                {/* Grid con detalles de hardware descubierto */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                   {localDetectedAgents.map((agent) => (
-                    <div
-                      key={agent.id}
-                      className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col justify-between space-y-3"
-                    >
+                    <div key={agent.id} className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col justify-between space-y-3">
                       <div className="flex items-start justify-between">
                         <div>
                           <span className="font-bold text-white text-sm block">{agent.name}</span>
@@ -638,7 +583,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                       </div>
 
                       <div className="p-2.5 rounded-lg bg-black border border-zinc-800 flex items-center justify-between text-[11px]">
-                        <span className="text-zinc-400">ID de Agente AnyDesk:</span>
+                        <span className="text-zinc-400">ID de Agente:</span>
                         <strong className="text-white font-mono tracking-wider">{agent.agentId}</strong>
                       </div>
 
@@ -652,7 +597,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
                           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs transition-colors"
                         >
                           <Zap className="w-3.5 h-3.5" />
-                          <span>Conectar Directo</span>
+                          <span>Conectar al Monitor</span>
                         </button>
                       </div>
                     </div>
@@ -662,209 +607,156 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
             </div>
           )}
 
-          {/* ----------------------------------------------------------------------- */}
-          {/* TAB 3: SESIÓN ACTIVA DE ESCRITORIO REMOTO (ESTILO ANYDESK)              */}
-          {/* ----------------------------------------------------------------------- */}
+          {/* TAB 3: SESIÓN DE TELEMETRÍA EN VIVO (AGENTE -> MONITOR) */}
           {activeTab === 'session' && (
             <div className="space-y-4">
               {connectingStep && (
                 <div className="p-8 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-center space-y-4 animate-pulse">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-600 to-orange-600 text-white flex items-center justify-center mx-auto shadow-xl">
+                  <div className="w-12 h-12 rounded-2xl bg-[#00ff66]/20 border border-[#00ff66]/40 text-[#00ff66] flex items-center justify-center mx-auto shadow-xl">
                     <Zap className="w-6 h-6 animate-bounce" />
                   </div>
                   <h3 className="text-base font-bold text-white uppercase tracking-wider">
-                    Estableciendo Conexión AnyDesk Directa
+                    Sincronizando Enlace de Telemetría
                   </h3>
                   <p className="text-xs text-[#00ff66] font-mono">{connectingStep}</p>
                 </div>
               )}
 
               {session && !connectingStep && (
-                <div className="space-y-3">
-                  {/* Floating Toolbar AnyDesk */}
-                  <div className="p-2 rounded-xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between gap-2 overflow-x-auto text-[11px]">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-black text-[#00ff66] font-bold border border-zinc-800">
-                        {session.fps} FPS
-                      </span>
-                      <span className="text-zinc-400 hidden sm:inline">
-                        Latencia: <strong className="text-white">{session.latencyMs}ms</strong>
-                      </span>
-                      <span className="text-zinc-400 hidden md:inline">
-                        Tipo: <strong className="text-white">{session.connectionType === 'LAN_LOCAL_DISCOVERY' ? 'LAN Direct P2P' : 'Túnel Agente Relay'}</strong>
-                      </span>
+                <div className="space-y-4">
+                  {/* Tarjeta de Identidad del Agente Enlazado */}
+                  <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 rounded-xl bg-black border border-zinc-700 text-[#00ff66]">
+                        <Server className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-bold text-white">{session.serverName}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00ff66] text-black">
+                            TELEMETRÍA EN VIVO
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                          ID: <strong className="text-white">{session.remoteId}</strong> • IP: {session.ipAddress} • {session.osType}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Macros Rápidos de Teclado */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => sendMacro('Ctrl+Alt+Del')}
-                        className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-[10px] transition-colors"
-                        title="Enviar combinación de teclas Ctrl+Alt+Del"
+                        onClick={() => {
+                          setNotification(`Heartbeat enviado a ${session.serverName}. Latencia: ${session.latencyMs}ms`);
+                          setTimeout(() => setNotification(null), 3000);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors"
                       >
-                        Ctrl+Alt+Del
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Test Heartbeat</span>
                       </button>
                       <button
-                        onClick={() => sendMacro('Win+R')}
-                        className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-[10px] transition-colors"
-                        title="Abrir diálogo Ejecutar de Windows"
+                        onClick={() => {
+                          const srv = servers.find(s => s.name === session.serverName || s.host === session.ipAddress) || {
+                            id: `srv-${Date.now()}`,
+                            name: session.serverName,
+                            host: session.ipAddress,
+                            port: session.port,
+                            osType: session.osType,
+                            ssl: true,
+                            isCurrent: true,
+                            status: 'ONLINE' as const,
+                            latencyMs: session.latencyMs,
+                            agentId: session.remoteId,
+                            isLocalDiscovered: session.connectionType === 'LAN_LOCAL_DISCOVERY',
+                            lastPing: 'En vivo'
+                          };
+                          onSelectServer(srv as any);
+                          onClose();
+                        }}
+                        className="px-4 py-2 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,255,102,0.25)] transition-all"
                       >
-                        Win+R
-                      </button>
-                      <button
-                        onClick={() => sendMacro('Win+X')}
-                        className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-[10px] transition-colors"
-                        title="Menú Administrativo de Windows"
-                      >
-                        Win+X
-                      </button>
-                      <button
-                        onClick={() => setActiveRemoteApp(activeRemoteApp === 'powershell' ? 'taskmgr' : 'powershell')}
-                        className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-[#00ff66] font-bold text-[10px] transition-colors"
-                      >
-                        Cambiar Ventana ({activeRemoteApp.toUpperCase()})
+                        <Activity className="w-3.5 h-3.5" />
+                        <span>Abrir en Panel de Control Principal</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Canvas / Pantalla Simulada del Escritorio Remoto Windows */}
-                  <div
-                    onMouseMove={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setMousePos({ x: Math.round(e.clientX - rect.left), y: Math.round(e.clientY - rect.top) });
-                    }}
-                    className="relative w-full h-[480px] sm:h-[540px] rounded-2xl bg-slate-950 border-2 border-zinc-700 overflow-hidden shadow-2xl flex flex-col justify-between select-none"
-                    style={{
-                      backgroundImage: 'radial-gradient(circle at 50% 50%, #0d1b2a 0%, #020617 100%)'
-                    }}
-                  >
-                    {/* Watermark / HUD Superior de la pantalla remota */}
-                    <div className="p-3 flex items-center justify-between text-[11px] text-zinc-400 bg-black/40 backdrop-blur-sm border-b border-white/5">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-[#00ff66]" />
-                        <span className="font-bold text-white">{session.serverName}</span>
-                        <span>({session.ipAddress})</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span>Puntero Remoto: X:{mousePos.x} Y:{mousePos.y}</span>
-                        <span className="text-[#00ff66]">Direct Stream Activo</span>
-                      </div>
-                    </div>
-
-                    {/* Ventana Activa en el Escritorio Remoto */}
-                    <div className="p-4 flex-1 flex items-center justify-center">
-                      {activeRemoteApp === 'powershell' && (
-                        <div className="w-full max-w-2xl h-80 rounded-xl bg-black/90 border border-zinc-700 shadow-2xl flex flex-col overflow-hidden font-mono text-xs">
-                          {/* Ventana Header */}
-                          <div className="px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between text-[11px]">
-                            <span className="text-white font-bold flex items-center gap-1.5">
-                              <Terminal className="w-3.5 h-3.5 text-cyan-400" /> Administrador: Windows PowerShell ({session.serverName})
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80 inline-block" />
-                              <span className="w-2.5 h-2.5 rounded-full bg-green-500/80 inline-block" />
-                              <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block" />
-                            </div>
-                          </div>
-
-                          {/* Terminal Output */}
-                          <div className="p-3 flex-1 overflow-y-auto text-zinc-300 text-[11px] space-y-1">
-                            {remoteTerminalLogs.map((log, idx) => (
-                              <div key={idx} className="whitespace-pre-wrap">{log}</div>
-                            ))}
-                          </div>
-
-                          {/* Interactive Command Input */}
-                          <form onSubmit={handleSendRemoteCommand} className="p-2 border-t border-zinc-800 flex items-center gap-2 bg-zinc-950">
-                            <span className="text-[#00ff66] font-bold text-xs">PS&gt;</span>
-                            <input
-                              type="text"
-                              value={remoteCommandInput}
-                              onChange={(e) => setRemoteCommandInput(e.target.value)}
-                              placeholder="Escribe un comando remoto (ej: hostname, Get-Process, ipconfig)..."
-                              className="flex-1 bg-transparent text-white text-xs font-mono focus:outline-none placeholder:text-zinc-600"
-                            />
-                            <button
-                              type="submit"
-                              className="px-2.5 py-1 rounded bg-[#00ff66] text-black font-bold text-[10px] hover:bg-[#00dd55]"
-                            >
-                              Enviar
-                            </button>
-                          </form>
-                        </div>
-                      )}
-
-                      {activeRemoteApp === 'taskmgr' && (
-                        <div className="w-full max-w-2xl h-80 rounded-xl bg-zinc-950/95 border border-zinc-700 shadow-2xl p-4 flex flex-col justify-between font-mono text-xs">
-                          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                            <span className="font-bold text-white flex items-center gap-1.5">
-                              <Activity className="w-4 h-4 text-[#ff6b00]" /> Administrador de Tareas ({session.serverName})
-                            </span>
-                            <span className="text-[#00ff66] text-[10px]">Actualizando en vivo</span>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-3 my-2">
-                            <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-center">
-                              <span className="text-[10px] text-zinc-400 block">CPU</span>
-                              <span className="text-xl font-black text-white">24%</span>
-                              <span className="text-[10px] text-[#00ff66]">3.40 GHz</span>
-                            </div>
-                            <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-center">
-                              <span className="text-[10px] text-zinc-400 block">MEMORIA</span>
-                              <span className="text-xl font-black text-white">64%</span>
-                              <span className="text-[10px] text-zinc-400">10.2 / 16 GB</span>
-                            </div>
-                            <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-center">
-                              <span className="text-[10px] text-zinc-400 block">DISCO (C:)</span>
-                              <span className="text-xl font-black text-white">58%</span>
-                              <span className="text-[10px] text-amber-400">NVMe OK</span>
-                            </div>
-                          </div>
-
-                          <div className="text-[11px] text-zinc-400 border-t border-zinc-850 pt-2 flex items-center justify-between">
-                            <span>Daemon de Telemetría: <strong className="text-[#00ff66]">ONLINE</strong></span>
-                            <button
-                              onClick={() => setActiveRemoteApp('powershell')}
-                              className="text-[#00ff66] hover:underline"
-                            >
-                              Volver a Terminal
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Simulated Remote Cursor */}
-                    <div
-                      className="absolute w-4 h-4 pointer-events-none transition-all duration-75 text-red-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
-                      style={{ left: `${mousePos.x}px`, top: `${mousePos.y}px` }}
-                    >
-                      <MousePointer className="w-4 h-4 fill-red-500" />
-                    </div>
-
-                    {/* Barra de Tareas Inferior de Windows */}
-                    <div className="h-10 bg-zinc-900/90 backdrop-blur-md border-t border-zinc-800 flex items-center justify-between px-3 text-xs">
-                      <div className="flex items-center gap-2">
-                        {/* Windows Start Button */}
-                        <div className="w-7 h-7 rounded bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center cursor-pointer shadow-sm">
-                          <span className="font-black text-[10px]">田</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-800/80 text-[11px] text-zinc-300">
-                          <Terminal className="w-3 h-3 text-cyan-400" />
-                          <span>PowerShell</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-zinc-800/80 text-[11px] text-zinc-300">
-                          <HardDrive className="w-3 h-3 text-amber-400" />
-                          <span>C:\CrashingLive</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 text-[11px] text-zinc-400 font-mono">
-                        <span className="text-[#00ff66] flex items-center gap-1">
-                          <Wifi className="w-3 h-3" /> LAN
+                  {/* Panel de Métricas de Hardware en Tiempo Real */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* CPU */}
+                    <div className="p-4 rounded-xl bg-black border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between text-zinc-400">
+                        <span className="text-xs font-bold uppercase flex items-center gap-1.5">
+                          <Cpu className="w-3.5 h-3.5 text-[#00ff66]" /> Uso de CPU
                         </span>
-                        <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="text-xs font-bold text-white">{liveMetrics.cpu}%</span>
                       </div>
+                      <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden">
+                        <div className="h-full bg-[#00ff66] transition-all duration-500" style={{ width: `${liveMetrics.cpu}%` }} />
+                      </div>
+                      <span className="text-[10px] text-zinc-500 block">Frecuencia nominal: 3.20 GHz</span>
+                    </div>
+
+                    {/* RAM */}
+                    <div className="p-4 rounded-xl bg-black border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between text-zinc-400">
+                        <span className="text-xs font-bold uppercase flex items-center gap-1.5">
+                          <HardDrive className="w-3.5 h-3.5 text-[#00ff66]" /> Memoria RAM
+                        </span>
+                        <span className="text-xs font-bold text-white">{liveMetrics.ram}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden">
+                        <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${liveMetrics.ram}%` }} />
+                      </div>
+                      <span className="text-[10px] text-zinc-500 block">{liveMetrics.ramUsedGB} GB de {liveMetrics.ramTotalGB} GB en uso</span>
+                    </div>
+
+                    {/* Red I/O */}
+                    <div className="p-4 rounded-xl bg-black border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between text-zinc-400">
+                        <span className="text-xs font-bold uppercase flex items-center gap-1.5">
+                          <Wifi className="w-3.5 h-3.5 text-[#00ff66]" /> Tráfico de Red
+                        </span>
+                        <span className="text-[10px] text-emerald-400">{session.latencyMs}ms PING</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="text-zinc-300">IN: <strong>{liveMetrics.netInKB} KB/s</strong></span>
+                        <span className="text-zinc-300">OUT: <strong>{liveMetrics.netOutKB} KB/s</strong></span>
+                      </div>
+                      <span className="text-[10px] text-zinc-500 block">Adaptador Ethernet principal activo</span>
+                    </div>
+
+                    {/* Salud y Servicios */}
+                    <div className="p-4 rounded-xl bg-black border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between text-zinc-400">
+                        <span className="text-xs font-bold uppercase flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-[#00ff66]" /> Salud del Nodo
+                        </span>
+                        <span className="text-[10px] text-[#00ff66] font-bold">ÓPTIMA</span>
+                      </div>
+                      <div className="text-xs text-zinc-300 font-mono">
+                        <span>Servicios activos: <strong>{liveMetrics.servicesRunning}</strong></span>
+                      </div>
+                      <span className="text-[10px] text-zinc-500 block">Uptime: {liveMetrics.uptime}</span>
+                    </div>
+                  </div>
+
+                  {/* Consola de Registro de Telemetría en Vivo */}
+                  <div className="p-4 rounded-xl bg-black border border-zinc-800 space-y-2">
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                      <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                        <Terminal className="w-4 h-4 text-[#00ff66]" /> Registro Continuo de Telemetría (Daemon Log)
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Puerto: 8443 (TCP Stream)</span>
+                    </div>
+
+                    <div className="font-mono text-[11px] text-zinc-300 space-y-1 max-h-36 overflow-y-auto">
+                      {telemetryLogs.map((log, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span className="text-zinc-500">[{new Date().toLocaleTimeString()}]</span>
+                          <span className={idx === telemetryLogs.length - 1 ? 'text-[#00ff66]' : ''}>{log}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

@@ -21,7 +21,14 @@ import {
   initialIncidents, 
   defaultWizardConfig 
 } from './data/mockData';
-import { fetchApprovals, decideApproval, fetchRealSystemTelemetry, RealSystemTelemetry } from './services/api';
+import { 
+  fetchApprovals, 
+  decideApproval, 
+  fetchRealSystemTelemetry, 
+  RealSystemTelemetry,
+  fetchConnectedAgents,
+  fetchAgentById
+} from './services/api';
 import { Header } from './components/Header';
 import { LiveTelemetry } from './components/LiveTelemetry';
 import { ServicesManager } from './components/ServicesManager';
@@ -305,10 +312,50 @@ export default function App() {
       ? Math.max(1000, wizardConfig.telemetryIntervalSec * 1000) 
       : 8000;
 
-    const timer = setInterval(() => {
+    const timer = setInterval(async () => {
       const now = new Date();
       const timeStr = now.toTimeString().split(' ')[0];
 
+      // 1. Si el servidor activo tiene un ID de Agente AnyDesk, consultar su telemetria viva
+      if (currentServer?.agentId) {
+        try {
+          const agentData = await fetchAgentById(currentServer.agentId);
+          if (agentData && agentData.status === 'ONLINE') {
+            const agentPoint: SystemMetricPoint = {
+              time: timeStr,
+              cpu: agentData.cpu,
+              ram: agentData.ram,
+              ramUsedGB: agentData.ramUsedGB,
+              ramTotalGB: agentData.ramTotalGB,
+              netInKB: agentData.netInKB,
+              netOutKB: agentData.netOutKB,
+              diskReadMB: 2.8,
+              diskWriteMB: 1.2,
+            };
+            setMetricsHistory((prev) => [...prev.slice(-19), agentPoint]);
+            setServers((prev) =>
+              prev.map((s) =>
+                s.id === currentServerId
+                  ? {
+                      ...s,
+                      cpu: agentData.cpu,
+                      ram: agentData.ram,
+                      ramUsedGB: agentData.ramUsedGB,
+                      ramTotalGB: agentData.ramTotalGB,
+                      netInKB: agentData.netInKB,
+                      netOutKB: agentData.netOutKB,
+                      lastPing: 'En vivo (Agente AnyDesk)',
+                      status: 'ONLINE',
+                    }
+                  : s
+              )
+            );
+            return;
+          }
+        } catch {}
+      }
+
+      // 2. Si es el nodo local o el agente de este host
       fetchRealSystemTelemetry()
         .then((real) => {
           if (real && real.isRealHost) {
@@ -375,7 +422,7 @@ export default function App() {
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [wizardConfig.telemetryIntervalSec, isDocumentVisible, mainSection, activeTab]);
+  }, [wizardConfig.telemetryIntervalSec, isDocumentVisible, mainSection, activeTab, currentServerId, currentServer?.agentId]);
 
   // Handle Server Switching (Connect to another computer in the network)
   const handleSelectServer = (selected: ConnectedServer) => {

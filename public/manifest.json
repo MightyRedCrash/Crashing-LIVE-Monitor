@@ -1,0 +1,35 @@
+{
+  "short_name": "Crashing LIVE",
+  "name": "Crashing LIVE - Monitor Central de Agentes",
+  "description": "Panel de control y telemetría en tiempo real para agentes Windows",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "64x64",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0b0e14",
+  "theme_color": "#00ff66",
+  "display": "standalone",
+  "orientation": "portrait-primary"
+}

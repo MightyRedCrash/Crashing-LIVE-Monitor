@@ -217,3 +217,88 @@ export async function fetchRealSystemTelemetry(): Promise<RealSystemTelemetry | 
     return null;
   }
 }
+
+export interface AgentSessionData {
+  agentId: string;
+  displayCode: string;
+  numericCode: string;
+  hostname: string;
+  ip: string;
+  port: number;
+  osType: string;
+  status: 'ONLINE' | 'OFFLINE';
+  cpu: number;
+  ram: number;
+  ramUsedGB: number;
+  ramTotalGB: number;
+  diskPercent: number;
+  diskFreeGB: number;
+  diskTotalGB: number;
+  netInKB: number;
+  netOutKB: number;
+  uptimeSeconds: number;
+  servicesRunning: number;
+  lastPing: string;
+  lastSeen: number;
+  history?: Array<{
+    time: string;
+    cpu: number;
+    ram: number;
+    ramUsedGB: number;
+    ramTotalGB: number;
+    netInKB: number;
+    netOutKB: number;
+    diskReadMB: number;
+    diskWriteMB: number;
+  }>;
+}
+
+export async function fetchConnectedAgents(): Promise<AgentSessionData[]> {
+  try {
+    const res = await fetch('/api/agents');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.agents || [];
+  } catch (err) {
+    console.warn('Error fetching connected agents list:', err);
+    return [];
+  }
+}
+
+export async function connectAgentByCode(agentCode: string): Promise<{ success: boolean; agent?: AgentSessionData; error?: string; message?: string }> {
+  try {
+    const res = await fetch('/api/agents/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentCode })
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Error de conexión con el monitor central.'
+    };
+  }
+}
+
+export async function fetchAgentById(agentId: string): Promise<AgentSessionData | null> {
+  try {
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.agent || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchHostAgentCode(): Promise<{ agentId: string; displayCode: string; hostname: string } | null> {
+  try {
+    const res = await fetch('/api/agent/my-code');
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+

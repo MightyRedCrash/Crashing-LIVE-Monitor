@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ConnectedServer } from '../types';
 import { 
   Server, 
@@ -20,6 +20,7 @@ import {
   Copy,
   X
 } from 'lucide-react';
+import { fetchConnectedAgents, connectAgentByCode } from '../services/api';
 
 interface ServerConnectionModalProps {
   servers: ConnectedServer[];
@@ -64,7 +65,7 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
   // Equipos detectados automáticamente en la red local (LAN)
   const [localDetectedAgents, setLocalDetectedAgents] = useState([
     {
-      agentId: 'CL-948-201-143',
+      agentId: '948 201 143',
       name: 'WINSRV-2022-DC01',
       ip: '192.168.1.140',
       port: 8443,
@@ -75,7 +76,7 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
       isLocal: true,
     },
     {
-      agentId: 'CL-834-192-750',
+      agentId: '834 192 750',
       name: 'WIN11-DEV-STATION',
       ip: '192.168.1.88',
       port: 8443,
@@ -86,7 +87,7 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
       isLocal: true,
     },
     {
-      agentId: 'CL-550-184-902',
+      agentId: '550 184 902',
       name: 'CONTABILIDAD-PC',
       ip: '192.168.1.55',
       port: 8443,
@@ -97,7 +98,7 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
       isLocal: true,
     },
     {
-      agentId: 'CL-712-409-338',
+      agentId: '712 409 338',
       name: 'WINSRV-BACKUP02',
       ip: '10.0.2.14',
       port: 8443,
@@ -109,30 +110,68 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
     },
   ]);
 
+  // Cargar agentes reales conectados al backend
+  useEffect(() => {
+    fetchConnectedAgents().then(agents => {
+      if (agents && agents.length > 0) {
+        setLocalDetectedAgents(agents.map(a => ({
+          agentId: a.displayCode,
+          name: a.hostname,
+          ip: a.ip,
+          port: a.port,
+          osType: a.osType,
+          latencyMs: a.status === 'ONLINE' ? 2 : 120,
+          cpu: a.cpu,
+          ram: a.ram,
+          isLocal: true
+        })));
+      }
+    });
+  }, []);
+
   const handleScanLan = () => {
     setIsScanningLan(true);
     setTestState('idle');
-    setTimeout(() => {
+    fetchConnectedAgents().then(agents => {
+      if (agents && agents.length > 0) {
+        setLocalDetectedAgents(agents.map(a => ({
+          agentId: a.displayCode,
+          name: a.hostname,
+          ip: a.ip,
+          port: a.port,
+          osType: a.osType,
+          latencyMs: a.status === 'ONLINE' ? 2 : 120,
+          cpu: a.cpu,
+          ram: a.ram,
+          isLocal: true
+        })));
+      }
       setIsScanningLan(false);
-    }, 600);
+    });
   };
 
-  const handleTestAnydeskId = () => {
+  const handleTestAnydeskId = async () => {
     if (!agentIdInput.trim()) return;
     setTestState('testing');
-    setTimeout(() => {
+    const res = await connectAgentByCode(agentIdInput.trim());
+    if (res.success && res.agent) {
+      setTestedLatency(2);
+      setTestMessage(`Agente ${res.agent.hostname} detectado en línea [${res.agent.displayCode}] (${res.agent.ip}:${res.agent.port}).`);
+      setTestState('success');
+    } else {
       const found = localDetectedAgents.find(
-        (a) => a.agentId.replace(/[^A-Z0-9]/g, '') === agentIdInput.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        (a) => a.agentId.replace(/\D/g, '') === agentIdInput.replace(/\D/g, '')
       );
       if (found) {
         setTestedLatency(found.latencyMs);
         setTestMessage(`Agente ${found.name} detectado y listo en red local (${found.ip}:${found.port}).`);
+        setTestState('success');
       } else {
-        setTestedLatency(Math.floor(Math.random() * 12) + 6);
-        setTestMessage(`Túnel P2P AnyDesk establecido con éxito con el ID ${agentIdInput}. Agente en línea.`);
+        setTestedLatency(null);
+        setTestMessage(`No se detectó transmisión para "${agentIdInput}". Ejecute iniciar_agente.bat en el equipo Windows.`);
+        setTestState('failed');
       }
-      setTestState('success');
-    }, 800);
+    }
   };
 
   const handleTestIpPort = () => {
@@ -147,16 +186,44 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
   };
 
   // Enviar conexión por ID de Agente (AnyDesk style)
-  const handleConnectByAnydeskId = (e: React.FormEvent) => {
+  const handleConnectByAnydeskId = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agentIdInput.trim()) return;
 
-    const cleanId = agentIdInput.toUpperCase().trim();
+    const cleanInput = agentIdInput.trim();
+    const res = await connectAgentByCode(cleanInput);
+
+    if (res.success && res.agent) {
+      const ag = res.agent;
+      onAddServer({
+        name: agentCustomName.trim() || ag.hostname,
+        host: ag.ip,
+        port: ag.port,
+        osType: ag.osType,
+        ssl: true,
+        isCurrent: true,
+        status: 'ONLINE',
+        latencyMs: 2,
+        agentId: ag.displayCode,
+        isLocalDiscovered: true,
+        cpu: ag.cpu,
+        ram: ag.ram,
+        ramUsedGB: ag.ramUsedGB,
+        ramTotalGB: ag.ramTotalGB,
+        netInKB: ag.netInKB,
+        netOutKB: ag.netOutKB
+      });
+      setActiveTab('list');
+      setAgentIdInput('');
+      setAgentCustomName('');
+      return;
+    }
+
     const foundLocal = localDetectedAgents.find(
-      (a) => a.agentId.replace(/[^A-Z0-9]/g, '') === cleanId.replace(/[^A-Z0-9]/g, '')
+      (a) => a.agentId.replace(/\D/g, '') === cleanInput.replace(/\D/g, '')
     );
 
-    const srvName = agentCustomName.trim() || foundLocal?.name || `Agente AnyDesk (${cleanId})`;
+    const srvName = agentCustomName.trim() || foundLocal?.name || `Agente AnyDesk (${cleanInput})`;
     const srvHost = foundLocal?.ip || '192.168.1.140';
     const srvPort = foundLocal?.port || 8443;
     const srvOs = foundLocal?.osType || 'Windows Server 2022';
@@ -171,7 +238,7 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
       isCurrent: true,
       status: 'ONLINE',
       latencyMs: srvLatency,
-      agentId: cleanId,
+      agentId: cleanInput,
       isLocalDiscovered: !!foundLocal,
     });
 

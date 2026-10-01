@@ -1,0 +1,35 @@
+<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.5" flood-color="#00ff66" flood-opacity="0.85" />
+    </filter>
+    <filter id="orglow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="#ff6b00" flood-opacity="0.95" />
+    </filter>
+  </defs>
+  <rect width="48" height="48" rx="10" fill="#0b0e14" stroke="#00ff66" stroke-width="1.2" stroke-opacity="0.6"/>
+  <rect x="7" y="9" width="34" height="7.5" rx="2" fill="#10141d" stroke="#27272a" stroke-width="0.8"/>
+  <circle cx="11" cy="12.75" r="1.4" fill="#00ff66" filter="url(#glow)"/>
+  <circle cx="14.5" cy="12.75" r="1" fill="#ffaa00"/>
+  <line x1="31" y1="12.75" x2="37" y2="12.75" stroke="#3f3f46" stroke-width="1" stroke-linecap="round"/>
+
+  <rect x="7" y="19" width="34" height="7.5" rx="2" fill="#10141d" stroke="#27272a" stroke-width="0.8"/>
+  <circle cx="11" cy="22.75" r="1.4" fill="#00ff66" filter="url(#glow)"/>
+  <circle cx="14.5" cy="22.75" r="1" fill="#00e5ff"/>
+  <line x1="31" y1="22.75" x2="37" y2="22.75" stroke="#3f3f46" stroke-width="1" stroke-linecap="round"/>
+
+  <rect x="7" y="29" width="34" height="7.5" rx="2" fill="#10141d" stroke="#27272a" stroke-width="0.8"/>
+  <circle cx="11" cy="32.75" r="1.4" fill="#ff6b00"/>
+  <circle cx="14.5" cy="32.75" r="1" fill="#00ff66" filter="url(#glow)"/>
+  <line x1="31" y1="32.75" x2="37" y2="32.75" stroke="#3f3f46" stroke-width="1" stroke-linecap="round"/>
+
+  <path d="M 5 22.75 L 18 22.75 L 20.5 20.5 L 22.5 25 L 24.5 21.5 L 26.5 22.75 L 28.5 27 L 32.5 6 L 36.5 34.5 L 39 21 L 41 22.75 L 43.5 22.75" stroke="#00ff66" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  <circle cx="5" cy="22.75" r="1.2" fill="#00ff66"/>
+
+  <g filter="url(#orglow)">
+    <circle cx="32.5" cy="6" r="3.2" fill="#ff6b00" opacity="0.6"/>
+    <circle cx="32.5" cy="6" r="1.6" fill="#ffffff"/>
+    <line x1="28.5" y1="6" x2="36.5" y2="6" stroke="#ffffff" stroke-width="0.9" stroke-linecap="round"/>
+    <line x1="32.5" y1="2" x2="32.5" y2="10" stroke="#ffffff" stroke-width="0.9" stroke-linecap="round"/>
+  </g>
+</svg>

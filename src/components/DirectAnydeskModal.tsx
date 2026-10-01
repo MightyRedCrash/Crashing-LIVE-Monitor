@@ -28,6 +28,14 @@ import {
   Info
 } from 'lucide-react';
 
+import { 
+  fetchConnectedAgents, 
+  connectAgentByCode, 
+  fetchAgentById, 
+  fetchHostAgentCode, 
+  AgentSessionData 
+} from '../services/api';
+
 interface DirectAnydeskModalProps {
   onClose: () => void;
   servers: ConnectedServer[];
@@ -43,8 +51,8 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
   onSelectServer,
   onAddServer,
 }) => {
-  // ID de este Monitor Central
-  const myMonitorId = 'CL-104-582-901';
+  // ID de este Monitor Central (dinamico del host)
+  const [myMonitorId, setMyMonitorId] = useState('CL-104-582-901');
 
   // Remote Target ID input
   const [remoteIdInput, setRemoteIdInput] = useState('');
@@ -74,16 +82,14 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     servicesRunning: 142
   });
 
-  // Simulated Telemetry logs
+  // Simulated & Live Telemetry logs
   const [telemetryLogs, setTelemetryLogs] = useState<string[]>([
     'Enlace P2P TLS 1.3 establecido.',
     'Agente de telemetría sincronizado en puerto 8443.',
-    'Recibiendo telemetría continua de hardware cada 2s...',
-    'CPU: 22.4% | RAM: 58.1% (9.3 GB / 16.0 GB)',
-    'Discos: C: 45% libre | Red: 840 KB/s IN, 320 KB/s OUT'
+    'Recibiendo telemetría continua de hardware en tiempo real...'
   ]);
 
-  // Detected Local Servers on LAN
+  // Detected Local Servers on LAN (cargados dinámicamente desde el backend)
   const [localDetectedAgents, setLocalDetectedAgents] = useState<Array<{
     id: string;
     agentId: string;
@@ -93,13 +99,13 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     osType: string;
     latencyMs: number;
     mac: string;
-    status: 'ONLINE';
+    status: 'ONLINE' | 'OFFLINE';
     cpu: number;
     ram: number;
   }>>([
     {
       id: 'srv-node-1',
-      agentId: 'CL-948-201-143',
+      agentId: '948 201 143',
       name: 'WINSRV-2022-DC01',
       ip: '192.168.1.140',
       port: 8443,
@@ -112,7 +118,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     },
     {
       id: 'srv-node-2',
-      agentId: 'CL-834-192-750',
+      agentId: '834 192 750',
       name: 'WIN11-DEV-STATION',
       ip: '192.168.1.88',
       port: 8443,
@@ -125,7 +131,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     },
     {
       id: 'srv-node-4',
-      agentId: 'CL-550-184-902',
+      agentId: '550 184 902',
       name: 'CONTABILIDAD-PC',
       ip: '192.168.1.55',
       port: 8443,
@@ -138,7 +144,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     },
     {
       id: 'srv-node-3',
-      agentId: 'CL-712-409-338',
+      agentId: '712 409 338',
       name: 'WINSRV-BACKUP02',
       ip: '10.0.2.14',
       port: 8443,
@@ -151,23 +157,77 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     },
   ]);
 
-  // Actualizar métricas dinámicas si hay sesión activa
+  // Cargar ID del monitor propio y sincronizar agentes conectados en red
+  useEffect(() => {
+    fetchHostAgentCode().then(info => {
+      if (info?.displayCode) {
+        setMyMonitorId(info.displayCode);
+      }
+    });
+
+    const refreshAgents = async () => {
+      const agents = await fetchConnectedAgents();
+      if (agents && agents.length > 0) {
+        setLocalDetectedAgents(agents.map(a => ({
+          id: a.agentId,
+          agentId: a.displayCode,
+          name: a.hostname,
+          ip: a.ip,
+          port: a.port,
+          osType: a.osType,
+          latencyMs: a.status === 'ONLINE' ? 2 : 120,
+          mac: '00:15:5D:84:A2:10',
+          status: a.status,
+          cpu: a.cpu,
+          ram: a.ram
+        })));
+      }
+    };
+
+    refreshAgents();
+    const poller = setInterval(refreshAgents, 3000);
+    return () => clearInterval(poller);
+  }, []);
+
+  // Actualizar métricas dinámicas y telemetría real si hay sesión activa
   useEffect(() => {
     if (!session) return;
-    const timer = setInterval(() => {
-      setLiveMetrics(prev => {
-        const nextCpu = Math.max(8, Math.min(95, prev.cpu + (Math.random() * 8 - 4)));
-        const nextRam = Math.max(30, Math.min(85, prev.ram + (Math.random() * 2 - 1)));
-        return {
-          ...prev,
-          cpu: Number(nextCpu.toFixed(1)),
-          ram: Number(nextRam.toFixed(1)),
-          netInKB: Math.floor(600 + Math.random() * 600),
-          netOutKB: Math.floor(200 + Math.random() * 300),
-          diskReadMB: Number((2 + Math.random() * 4).toFixed(1)),
-          diskWriteMB: Number((1 + Math.random() * 3).toFixed(1))
-        };
-      });
+    const timer = setInterval(async () => {
+      const agent = await fetchAgentById(session.remoteId);
+      if (agent) {
+        setLiveMetrics({
+          cpu: agent.cpu,
+          ram: agent.ram,
+          ramUsedGB: agent.ramUsedGB,
+          ramTotalGB: agent.ramTotalGB,
+          diskReadMB: 3.4,
+          diskWriteMB: 1.2,
+          netInKB: agent.netInKB,
+          netOutKB: agent.netOutKB,
+          uptime: `${Math.floor(agent.uptimeSeconds / 3600)}h ${Math.floor((agent.uptimeSeconds % 3600) / 60)}m`,
+          servicesRunning: agent.servicesRunning
+        });
+        const nowStr = new Date().toLocaleTimeString('es-ES', { hour12: false });
+        setTelemetryLogs(prev => [
+          `[${nowStr}] CPU: ${agent.cpu}% | RAM: ${agent.ram}% (${agent.ramUsedGB} GB / ${agent.ramTotalGB} GB) | Red: ${agent.netInKB} KB/s IN`,
+          ...prev.slice(0, 19)
+        ]);
+      } else {
+        // Fallback dinámico si es nodo de prueba sin agente local activo
+        setLiveMetrics(prev => {
+          const nextCpu = Math.max(8, Math.min(95, prev.cpu + (Math.random() * 6 - 3)));
+          const nextRam = Math.max(30, Math.min(85, prev.ram + (Math.random() * 2 - 1)));
+          return {
+            ...prev,
+            cpu: Number(nextCpu.toFixed(1)),
+            ram: Number(nextRam.toFixed(1)),
+            netInKB: Math.floor(600 + Math.random() * 600),
+            netOutKB: Math.floor(200 + Math.random() * 300),
+            diskReadMB: Number((2 + Math.random() * 4).toFixed(1)),
+            diskWriteMB: Number((1 + Math.random() * 3).toFixed(1))
+          };
+        });
+      }
     }, 2000);
     return () => clearInterval(timer);
   }, [session]);
@@ -181,12 +241,12 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
   const handleScanLan = () => {
     setIsScanningLan(true);
     setScanProgress(15);
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       setScanProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
           setIsScanningLan(false);
-          setNotification('Escaneo LAN completado: 4 agentes detectados localmente.');
+          setNotification('Escaneo de red completado: Agentes sincronizados en tiempo real.');
           setTimeout(() => setNotification(null), 3000);
           return 100;
         }
@@ -196,44 +256,38 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
   };
 
   const handleIdInputChange = (val: string) => {
-    const clean = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const clean = val.toUpperCase().replace(/[^A-Z0-9\s-]/g, '');
     setRemoteIdInput(clean);
   };
 
-  // Conectar usando ID de Agente o Detección Local
-  const handleStartConnection = (targetAgentId: string, serverObj?: any) => {
-    if (!targetAgentId && !serverObj) return;
-
-    const idToUse = targetAgentId || serverObj?.agentId || 'CL-948-201-143';
-    const foundLocal = localDetectedAgents.find(
-      (a) => a.agentId.replace(/-/g, '') === idToUse.replace(/-/g, '') || a.name === serverObj?.name
-    );
-
-    const isLocal = !!foundLocal;
-    const targetName = foundLocal?.name || serverObj?.name || `Agente Vinculado (${idToUse})`;
-    const targetIp = foundLocal?.ip || serverObj?.host || '192.168.1.140';
-    const targetOs = foundLocal?.osType || serverObj?.osType || 'Windows Server 2022';
-    const targetLatency = isLocal ? (foundLocal?.latencyMs || 2) : 18;
+  // Conectar usando ID de Agente al estilo AnyDesk
+  const handleStartConnection = async (targetAgentId: string, serverObj?: any) => {
+    const rawId = (targetAgentId || serverObj?.agentId || '').trim();
+    if (!rawId && !serverObj) return;
 
     setActiveTab('session');
-    setConnectingStep('Buscando Agente en red local y relay de enlace AnyDesk...');
+    setConnectingStep(`Buscando Agente con código AnyDesk "${rawId}"...`);
 
-    setTimeout(() => {
-      setConnectingStep(isLocal ? 'Agente detectado en red local (192.168.1.0/24)...' : 'Negociando túnel seguro TLS con ID de Agente...');
+    // Consultar al backend central si el agente está transmitiendo
+    const connResult = await connectAgentByCode(rawId);
+
+    if (connResult.success && connResult.agent) {
+      const ag = connResult.agent;
+      setConnectingStep(`Agente ${ag.hostname} detectado. Estableciendo túnel de telemetría en vivo...`);
       setTimeout(() => {
-        setConnectingStep('Validando canal de telemetría y salud del host...');
+        setConnectingStep('Sincronizando flujo de métricas de CPU, memoria y discos...');
         setTimeout(() => {
           setConnectingStep(null);
           setSession({
-            remoteId: idToUse,
-            serverName: targetName,
-            ipAddress: targetIp,
-            port: 8443,
-            osType: targetOs,
+            remoteId: ag.agentId,
+            serverName: ag.hostname,
+            ipAddress: ag.ip,
+            port: ag.port,
+            osType: ag.osType,
             status: 'CONNECTED',
-            connectionType: isLocal ? 'LAN_LOCAL_DISCOVERY' : 'AGENT_ID_DIRECT',
+            connectionType: 'AGENT_ID_DIRECT',
             fps: 60,
-            latencyMs: targetLatency,
+            latencyMs: 2,
             quality: 'HIGH',
             sessionStartTime: new Date().toLocaleTimeString(),
             keyboardCaptured: false,
@@ -241,28 +295,95 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
             viewOnly: true,
           });
 
-          // Sincronizar o crear en la lista de servidores si no existe
-          const exists = servers.some(s => s.host === targetIp);
-          if (!exists) {
-            onAddServer({
-              name: targetName,
-              host: targetIp,
-              port: 8443,
-              osType: targetOs,
-              ssl: true,
-              isCurrent: true,
-              status: 'ONLINE',
-              latencyMs: targetLatency,
-              agentId: idToUse,
-              isLocalDiscovered: isLocal
-            });
-          }
+          setLiveMetrics({
+            cpu: ag.cpu,
+            ram: ag.ram,
+            ramUsedGB: ag.ramUsedGB,
+            ramTotalGB: ag.ramTotalGB,
+            diskReadMB: 3.5,
+            diskWriteMB: 1.2,
+            netInKB: ag.netInKB,
+            netOutKB: ag.netOutKB,
+            uptime: `${Math.floor(ag.uptimeSeconds / 3600)}h ${Math.floor((ag.uptimeSeconds % 3600) / 60)}m`,
+            servicesRunning: ag.servicesRunning
+          });
 
-          setNotification(`Agente ${targetName} vinculado exitosamente al Monitor Central.`);
+          // Agregar o seleccionar en la lista de servidores del monitor
+          onAddServer({
+            name: ag.hostname,
+            host: ag.ip,
+            port: ag.port,
+            osType: ag.osType,
+            ssl: true,
+            isCurrent: true,
+            status: 'ONLINE',
+            latencyMs: 2,
+            agentId: ag.displayCode,
+            isLocalDiscovered: true,
+            cpu: ag.cpu,
+            ram: ag.ram,
+            ramUsedGB: ag.ramUsedGB,
+            ramTotalGB: ag.ramTotalGB,
+            netInKB: ag.netInKB,
+            netOutKB: ag.netOutKB
+          });
+
+          setNotification(`Agente ${ag.hostname} [${ag.displayCode}] vinculado con éxito.`);
           setTimeout(() => setNotification(null), 4000);
         }, 500);
-      }, 600);
-    }, 500);
+      }, 500);
+    } else {
+      // Fallback a agentes locales detectados si coincide parcialmente
+      const foundLocal = localDetectedAgents.find(
+        (a) => a.agentId.replace(/\D/g, '') === rawId.replace(/\D/g, '') || a.name.toLowerCase() === rawId.toLowerCase()
+      );
+
+      if (foundLocal) {
+        setConnectingStep(`Agente ${foundLocal.name} localizado en red local...`);
+        setTimeout(() => {
+          setConnectingStep(null);
+          setSession({
+            remoteId: foundLocal.agentId,
+            serverName: foundLocal.name,
+            ipAddress: foundLocal.ip,
+            port: foundLocal.port,
+            osType: foundLocal.osType,
+            status: 'CONNECTED',
+            connectionType: 'LAN_LOCAL_DISCOVERY',
+            fps: 60,
+            latencyMs: foundLocal.latencyMs,
+            quality: 'HIGH',
+            sessionStartTime: new Date().toLocaleTimeString(),
+            keyboardCaptured: false,
+            mouseCaptured: false,
+            viewOnly: true,
+          });
+
+          onAddServer({
+            name: foundLocal.name,
+            host: foundLocal.ip,
+            port: foundLocal.port,
+            osType: foundLocal.osType,
+            ssl: true,
+            isCurrent: true,
+            status: 'ONLINE',
+            latencyMs: foundLocal.latencyMs,
+            agentId: foundLocal.agentId,
+            isLocalDiscovered: true,
+            cpu: foundLocal.cpu,
+            ram: foundLocal.ram
+          });
+
+          setNotification(`Agente ${foundLocal.name} vinculado exitosamente.`);
+          setTimeout(() => setNotification(null), 4000);
+        }, 600);
+      } else {
+        setConnectingStep(null);
+        setActiveTab('connect');
+        setNotification(connResult.error || `No se encontró transmisión activa para el código "${rawId}". Ejecute "iniciar_agente.bat" en el equipo Windows para transmitir.`);
+        setTimeout(() => setNotification(null), 6000);
+      }
+    }
   };
 
   const handleDisconnect = () => {

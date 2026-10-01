@@ -31,6 +31,7 @@ import { DiagnosticCenter } from './components/DiagnosticCenter';
 import { MonthlyReportView } from './components/MonthlyReportView';
 import { InstallWizard } from './components/InstallWizard';
 import { RemoteControlModal } from './components/RemoteControlModal';
+import { DirectAnydeskModal } from './components/DirectAnydeskModal';
 import { ServerConnectionModal } from './components/ServerConnectionModal';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { DeviceInstallerCenter } from './components/DeviceInstallerCenter';
@@ -85,6 +86,7 @@ export default function App() {
   // Modals
   const [showWizard, setShowWizard] = useState(false);
   const [showRemoteModal, setShowRemoteModal] = useState(false);
+  const [showDirectAnydeskModal, setShowDirectAnydeskModal] = useState(false);
   const [showServerManager, setShowServerManager] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showAndroidSim, setShowAndroidSim] = useState(false);
@@ -104,6 +106,8 @@ export default function App() {
       status: 'ONLINE',
       latencyMs: 2,
       lastPing: 'En vivo',
+      agentId: 'CL-948-201-143',
+      isLocalDiscovered: true,
       cpu: 25,
       ram: 66,
       ramUsedGB: 10.6,
@@ -125,6 +129,8 @@ export default function App() {
       status: 'ONLINE',
       latencyMs: 4,
       lastPing: 'Hace 1m',
+      agentId: 'CL-834-192-750',
+      isLocalDiscovered: true,
       cpu: 18,
       ram: 54,
       ramUsedGB: 8.6,
@@ -146,6 +152,8 @@ export default function App() {
       status: 'ONLINE',
       latencyMs: 9,
       lastPing: 'Hace 2m',
+      agentId: 'CL-712-409-338',
+      isLocalDiscovered: true,
       cpu: 44,
       ram: 72,
       ramUsedGB: 23.0,
@@ -237,8 +245,31 @@ export default function App() {
     });
   }, []);
 
-  // Periodic Telemetry Stream (Synchronized with real hardware when available)
+  // Track document visibility to pause polling and prevent CPU/battery drain in background
+  const [isDocumentVisible, setIsDocumentVisible] = useState<boolean>(() => 
+    typeof document !== 'undefined' ? !document.hidden : true
+  );
+
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsDocumentVisible(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Periodic Telemetry Stream (Optimized: pauses when tab is hidden, throttles when in other tabs)
+  useEffect(() => {
+    // If the browser tab is minimized/hidden, pause polling completely to save CPU and battery
+    if (!isDocumentVisible) return;
+
+    // Check if the user is actively viewing the live telemetry tab
+    const isTelemetryActive = mainSection === 'monitor' && activeTab === 'telemetry';
+    // If in another section or a heavy modal is open, throttle polling to 8 seconds
+    const intervalMs = isTelemetryActive 
+      ? Math.max(1000, wizardConfig.telemetryIntervalSec * 1000) 
+      : 8000;
+
     const timer = setInterval(() => {
       const now = new Date();
       const timeStr = now.toTimeString().split(' ')[0];
@@ -306,10 +337,10 @@ export default function App() {
           }
         })
         .catch(() => {});
-    }, wizardConfig.telemetryIntervalSec * 1000);
+    }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [wizardConfig.telemetryIntervalSec]);
+  }, [wizardConfig.telemetryIntervalSec, isDocumentVisible, mainSection, activeTab]);
 
   // Handle Server Switching (Connect to another computer in the network)
   const handleSelectServer = (selected: ConnectedServer) => {
@@ -648,6 +679,7 @@ export default function App() {
           setActiveTab('diagnostics');
         }}
         onOpenRemoteModal={() => setShowRemoteModal(true)}
+        onOpenDirectAnydesk={() => setShowDirectAnydeskModal(true)}
         onOpenWizard={() => setShowWizard(true)}
         onOpenHelp={() => setShowHelpModal(true)}
         onOpenAndroidSim={() => setShowAndroidSim(true)}
@@ -1200,6 +1232,7 @@ export default function App() {
                 currentServerId={currentServerId}
                 onSelectServer={handleSelectServer}
                 onOpenServerManager={() => setShowServerManager(true)}
+                onOpenDirectAnydesk={() => setShowDirectAnydeskModal(true)}
               />
             )}
 
@@ -1348,6 +1381,16 @@ export default function App() {
           targetHost={currentServer.name}
           ipAddress={currentServer.host}
           port={currentServer.port}
+        />
+      )}
+
+      {showDirectAnydeskModal && (
+        <DirectAnydeskModal
+          onClose={() => setShowDirectAnydeskModal(false)}
+          servers={servers}
+          currentServerId={currentServerId}
+          onSelectServer={handleSelectServer}
+          onAddServer={handleAddServer}
         />
       )}
 

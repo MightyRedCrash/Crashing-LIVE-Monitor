@@ -357,9 +357,17 @@ function getLocalIp(): string {
 // In-memory store for external Python agents reporting in
 const externalAgentReports = new Map<string, any>();
 
+// Lightweight cache for host telemetry to avoid redundant CPU/interface queries
+let cachedHostTelemetry: { data: any; expiresAt: number } | null = null;
+
 // API: Real System Telemetry from the Current Host Machine
 app.get('/api/system/real-telemetry', (req, res) => {
   try {
+    const now = Date.now();
+    if (cachedHostTelemetry && cachedHostTelemetry.expiresAt > now) {
+      return res.json(cachedHostTelemetry.data);
+    }
+
     const totalMemBytes = os.totalmem();
     const freeMemBytes = os.freemem();
     const totalMemGB = Number((totalMemBytes / (1024 ** 3)).toFixed(1));
@@ -387,7 +395,7 @@ app.get('/api/system/real-telemetry', (req, res) => {
     const cpus = os.cpus();
     const cpuModel = cpus && cpus.length > 0 ? cpus[0].model : 'Host CPU Architecture';
 
-    return res.json({
+    const payload = {
       success: true,
       isRealHost: true,
       hostname: os.hostname() || 'LOCAL-AGENT-HOST',
@@ -402,7 +410,11 @@ app.get('/api/system/real-telemetry', (req, res) => {
       cores: cpus ? cpus.length : 4,
       cpuModel,
       timestamp: new Date().toLocaleTimeString('es-ES', { hour12: false })
-    });
+    };
+
+    // Cache response for 1000ms
+    cachedHostTelemetry = { data: payload, expiresAt: now + 1000 };
+    return res.json(payload);
   } catch (err: any) {
     console.error('Error reading real system telemetry:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -414,6 +426,12 @@ app.post('/api/telemetry/report', (req, res) => {
   const { hostname, ip, port, cpu, ram, ramUsedGB, ramTotalGB, netInKB, netOutKB, osType } = req.body;
   if (!hostname) {
     return res.status(400).json({ error: 'hostname is required' });
+  }
+
+  // Prune map if too large to prevent memory growth
+  if (externalAgentReports.size > 50) {
+    const firstKey = externalAgentReports.keys().next().value;
+    if (firstKey) externalAgentReports.delete(firstKey);
   }
 
   const report = {

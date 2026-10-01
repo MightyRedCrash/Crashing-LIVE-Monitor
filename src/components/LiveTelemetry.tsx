@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { SystemMetricPoint, ConnectedServer } from '../types';
 import { 
   Cpu, 
@@ -69,6 +69,7 @@ interface LiveTelemetryProps {
   currentServerId: string;
   onSelectServer: (server: ConnectedServer) => void;
   onOpenServerManager: () => void;
+  onOpenDirectAnydesk?: () => void;
 }
 
 export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
@@ -81,6 +82,7 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
   currentServerId,
   onSelectServer,
   onOpenServerManager,
+  onOpenDirectAnydesk,
 }) => {
   const [notification, setNotification] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'detailed' | 'multi-server'>('detailed');
@@ -109,8 +111,8 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
 
   const activeServer = servers.find((s) => s.id === currentServerId) || servers[0];
 
-  // Helper for generating smooth SVG polyline sparklines
-  const generatePath = (
+  // Helper for generating smooth SVG polyline sparklines memoized
+  const generatePath = useCallback((
     data: number[],
     width: number,
     height: number,
@@ -126,17 +128,27 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
         return `${x},${y}`;
       })
       .join(' ');
-  };
+  }, []);
 
-  const cpuHistory = metrics.map((m) => m.cpu);
-  const ramHistory = metrics.map((m) => m.ram);
-  const netInHistory = metrics.map((m) => m.netInKB);
-  const maxNetIn = Math.max(...netInHistory, 1000);
-  const diskReadHistory = metrics.map((m) => m.diskReadMB);
-  const maxDisk = Math.max(...diskReadHistory, 10);
+  const { cpuHistory, ramHistory, netInHistory, maxNetIn, diskReadHistory, maxDisk } = useMemo(() => {
+    const cpuH = metrics.map((m) => m.cpu);
+    const ramH = metrics.map((m) => m.ram);
+    const netInH = metrics.map((m) => m.netInKB);
+    const maxN = Math.max(...netInH, 1000);
+    const diskH = metrics.map((m) => m.diskReadMB);
+    const maxD = Math.max(...diskH, 10);
+    return {
+      cpuHistory: cpuH,
+      ramHistory: ramH,
+      netInHistory: netInH,
+      maxNetIn: maxN,
+      diskReadHistory: diskH,
+      maxDisk: maxD
+    };
+  }, [metrics]);
 
-  // Per-core loads based on aggregate CPU
-  const simulatedCores = [
+  // Per-core loads based on aggregate CPU memoized
+  const simulatedCores = useMemo(() => [
     Math.min(100, Math.max(5, Math.round(currentMetric.cpu * 1.15))),
     Math.min(100, Math.max(5, Math.round(currentMetric.cpu * 0.85))),
     Math.min(100, Math.max(5, Math.round(currentMetric.cpu * 1.05))),
@@ -145,7 +157,7 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
     Math.min(100, Math.max(5, Math.round(currentMetric.cpu * 1.25))),
     Math.min(100, Math.max(5, Math.round(currentMetric.cpu * 0.60))),
     Math.min(100, Math.max(5, Math.round(currentMetric.cpu * 1.10))),
-  ];
+  ], [currentMetric.cpu]);
 
   const handleQuickFlush = () => {
     setNotification('Standby Memory Cache purgado con éxito. 1.4 GB liberados en ' + activeServer.name);
@@ -257,7 +269,9 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
     setTimeout(() => setNotification(null), 2500);
   };
 
-  const selectedServersList = servers.filter((s) => selectedServerIds.includes(s.id));
+  const selectedServersList = useMemo(() => {
+    return servers.filter((s) => selectedServerIds.includes(s.id));
+  }, [servers, selectedServerIds]);
 
   // =========================================================================
   // RENDERIZADO DE CADA MÓDULO INDIVIDUAL
@@ -784,6 +798,49 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Banner Conexión Directa Estilo AnyDesk (ID de Agente o Detección Local) */}
+        {onOpenDirectAnydesk && (
+          <div className="p-3 rounded-xl bg-gradient-to-r from-red-950/40 via-zinc-900 to-zinc-950 border border-orange-500/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 font-mono text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-orange-600 text-white flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(255,69,0,0.3)]">
+                <Zap className="w-4 h-4 fill-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white uppercase text-xs">
+                    Conexión Directa Estilo AnyDesk
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-red-950 text-red-300 border border-red-800 font-bold uppercase">
+                    ID Remoto o LAN
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Conéctate directamente a cualquier puesto remoto mediante su <strong>ID de Agente</strong> (ej. <code className="text-zinc-300">CL-948-201-143</code>) o mediante <strong>Detección Local Automática en LAN</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap">
+              <button
+                onClick={onOpenDirectAnydesk}
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(255,69,0,0.3)] transition-all"
+                title="Conectar equipo al monitor usando su ID de Agente o Auto-Detección LAN"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Por ID AnyDesk / LAN</span>
+              </button>
+
+              <button
+                onClick={onOpenServerManager}
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-cyan-300 border border-cyan-800/60 font-bold text-xs transition-all"
+                title="Conectar equipo al monitor usando IP y Puerto directo"
+              >
+                <span>Por IP y Puerto</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Fila Horizontal de Servidores Seleccionables en Pantalla */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

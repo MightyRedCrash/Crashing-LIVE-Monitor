@@ -111,15 +111,15 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded text-[10px] font-black font-mono uppercase bg-[#00ff66] text-black shadow-sm">
-                  PAQUETE RECOMENDADO
+                  INSTALADOR EN 1 SOLA VENTANA
                 </span>
                 <h3 className="text-base sm:text-lg font-black text-white font-mono uppercase tracking-wide">
-                  Descargar Suite Completa (.ZIP con Wizard Instalador)
+                  Descargar Suite Completa (.ZIP con Wizard Directo)
                 </h3>
               </div>
               <p className="text-xs text-zinc-300 font-mono mt-1 max-w-3xl leading-relaxed">
-                Incluye el asistente ejecutable <strong>INSTALL_WIZARD.bat</strong>. Al descomprimirlo y ejecutarlo como administrador, 
-                <strong className="text-[#00ff66]"> lo primero que muestra es el selector para elegir si este equipo será [1] Agente de Monitoreo, [2] Monitor Central o [3] Ambos</strong>.
+                Incluye <strong>Instalador.bat</strong> con protección anti-bucle de elevación UAC (solicita permiso una sola vez y no abre ventanas secundarias). 
+                <strong className="text-[#00ff66]"> Abre directamente el Wizard en una sola consola con las 4 opciones oficiales: [1] Instalar Agente, [2] Instalar Monitor, [3] Instalar Ambos o [4] Desinstalar componentes.</strong>
               </p>
             </div>
           </div>
@@ -131,7 +131,7 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
               title="Previsualizar qué muestra el Wizard al ejecutarse"
             >
               <Eye className="w-4 h-4 text-cyan-400" />
-              <span>{showWizardPreview ? 'Ocultar Pantalla' : 'Ver 1ª Pantalla Wizard'}</span>
+              <span>{showWizardPreview ? 'Ocultar Pantalla' : 'Ver Wizard de 4 Opciones'}</span>
             </button>
 
             <button
@@ -156,24 +156,21 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
 
         {/* Archivos incluidos en el ZIP */}
         <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-mono text-zinc-400">
-          <span className="text-zinc-500 uppercase font-bold text-[10px]">Contenido del ZIP:</span>
+          <span className="text-zinc-500 uppercase font-bold text-[10px]">Archivos del Instalador:</span>
           <span className="flex items-center gap-1 text-white">
-            <Play className="w-3 h-3 text-[#00ff66]" /> <strong>INSTALL_WIZARD.bat</strong> (Lanzador con Auto-Elevación)
+            <Play className="w-3 h-3 text-[#00ff66]" /> <strong>Instalador.bat</strong> (Lanzador con Anti-Bucle en 1 Ventana)
           </span>
-          <span className="flex items-center gap-1 text-[#ff6b00]">
-            <Play className="w-3 h-3" /> INSTALADOR_DIRECTO_AGENTE.bat
+          <span className="flex items-center gap-1 text-zinc-300">
+            <Play className="w-3 h-3 text-cyan-400" /> INSTALL_WIZARD.bat (Acceso directo equivalente)
           </span>
-          <span className="flex items-center gap-1 text-[#00ff66]">
-            <Play className="w-3 h-3" /> INSTALADOR_DIRECTO_MONITOR.bat
+          <span className="flex items-center gap-1 text-zinc-300">
+            <FileCode className="w-3 h-3 text-cyan-400" /> Wizard_Instalador.ps1 (Motor de las 4 opciones)
           </span>
           <span className="flex items-center gap-1 text-red-400">
-            <Play className="w-3 h-3" /> DESINSTALAR_COMPLETO.bat
+            <FileCode className="w-3 h-3" /> uninstall.ps1 (Desinstalador limpio)
           </span>
-          <span className="flex items-center gap-1 text-zinc-300">
-            <FileCode className="w-3 h-3 text-cyan-400" /> Wizard_Instalador.ps1
-          </span>
-          <span className="flex items-center gap-1 text-zinc-300">
-            <FileCode className="w-3 h-3 text-cyan-400" /> uninstall.ps1
+          <span className="flex items-center gap-1 text-orange-400">
+            <FileCode className="w-3 h-3" /> agent_daemon.py (Con ID AnyDesk y Beacon UDP)
           </span>
         </div>
 
@@ -181,9 +178,9 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
         <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 text-[11px] font-mono text-zinc-300 flex items-start gap-2.5">
           <ShieldCheck className="w-4 h-4 text-[#00ff66] shrink-0 mt-0.5" />
           <div>
-            <strong className="text-white">Desinstalable desde "Programas y Características" de Windows:</strong>
+            <strong className="text-white">Ejecución en una Sola Ventana y Desinstalación Oficial:</strong>
             <p className="text-zinc-400 mt-0.5">
-              Al instalarse, se registra formalmente en Windows (<code className="text-zinc-300">appwiz.cpl</code>). Podrá desinstalarlo y borrar todos sus archivos y servicios en cualquier momento desde <strong>Configuración &gt; Aplicaciones &gt; Aplicaciones instaladas</strong> o haciendo clic en <strong>DESINSTALAR_COMPLETO.bat</strong>.
+              El instalador no abre ventanas secundarias ni solicita permisos repetidos. Todo el proceso corre dentro de la misma consola. Además, puede elegir la opción <strong>[4] Desinstalar componentes</strong> en cualquier momento o hacerlo desde <strong>Configuración &gt; Aplicaciones de Windows</strong>.
             </p>
           </div>
         </div>
@@ -193,50 +190,48 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
           <div className="mt-3 p-4 rounded-xl bg-black border border-zinc-700 font-mono text-xs text-zinc-200 animate-in fade-in space-y-3 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2 text-[11px]">
               <span className="text-[#00ff66] font-bold flex items-center gap-1.5">
-                <Terminal className="w-3.5 h-3.5" /> Consola de Windows al ejecutar "INSTALL_WIZARD.bat"
+                <Terminal className="w-3.5 h-3.5" /> Pantalla directa al ejecutar "Instalador.bat"
               </span>
-              <span className="text-zinc-500">Auto-elevado como Administrador (CRLF nativo)</span>
+              <span className="text-zinc-500">1 Sola Ventana • Anti-Bucle UAC • 4 Opciones Directas</span>
             </div>
 
             <div className="space-y-2 text-[11px] text-zinc-300 bg-zinc-950 p-3 rounded-lg border border-zinc-850 whitespace-pre-wrap leading-relaxed">
               <span className="text-[#00ff66] font-bold block">
                 ========================================================================<br />
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CRASHING LIVE MONITOR - WIZARD DE INSTALACIÓN OFICIAL V2.6<br />
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CRASHING LIVE MONITOR - WIZARD INSTALADOR (v2.6)<br />
                 ========================================================================
               </span>
               <span className="text-zinc-400 block">
-                Servidor Configurado: {currentHost} [{currentIp}:{currentPort}]
+                Servidor Configurado : {currentHost}<br />
+                IP / Puerto Destino  : {currentIp}:{currentPort}<br />
+                Directorio Destino   : C:\CrashingLive
               </span>
               <span className="text-yellow-400 font-bold block mt-2">
-                ¿QUÉ TIPO DE INSTALACIÓN DESEA REALIZAR EN ESTE EQUIPO?
+                SELECCIONE LA OPCIÓN QUE DESEA EJECUTAR EN ESTE EQUIPO:
               </span>
-              <div className="space-y-1.5 pl-2 text-zinc-200">
-                <div>
-                  <strong className="text-white">[1] AGENTE DE MONITOREO</strong> (Para Servidores / Máquinas Monitoreadas)<br />
-                  <span className="text-zinc-400 text-[10px] pl-4 block">
-                    - Instala el daemon en segundo plano (Python / Windows Service)<br />
-                    - Sensores de CPU, RAM, Red, Discos y Procesos con telemetría en vivo<br />
-                    - Se registra en "Programas y Características" de Windows
+              <div className="space-y-2 pl-2 text-zinc-200">
+                <div className="p-2 rounded bg-zinc-900/60 border border-zinc-800">
+                  <strong className="text-white text-xs">[1] Instalar Agente</strong><br />
+                  <span className="text-zinc-400 text-[10px] block mt-0.5">
+                    Para servidores o puestos que serán monitoreados. Instala el daemon en segundo plano (Python / Windows Service) y sensores de CPU, RAM, Red y Discos.
                   </span>
                 </div>
-                <div>
-                  <strong className="text-white">[2] MONITOR CENTRAL / PANEL</strong> (Para la Estación del Administrador)<br />
-                  <span className="text-zinc-400 text-[10px] pl-4 block">
-                    - Configura el Panel de Control Web y Consola de Supervisión multiserver<br />
-                    - Aplica el esquema relacional en PostgreSQL 16 (schema.sql)<br />
-                    - Crea el acceso directo de escritorio "Crashing Live Monitor"
+                <div className="p-2 rounded bg-zinc-900/60 border border-zinc-800">
+                  <strong className="text-white text-xs">[2] Instalar Monitor</strong><br />
+                  <span className="text-zinc-400 text-[10px] block mt-0.5">
+                    Para la estación de control del administrador. Configura la consola web de supervisión, base de datos PostgreSQL y crea el acceso directo en el Escritorio.
                   </span>
                 </div>
-                <div>
-                  <strong className="text-white">[3] AMBOS</strong> (Full Stack / Servidor Todo-en-Uno)<br />
-                  <span className="text-zinc-400 text-[10px] pl-4 block">
-                    - Instala tanto el Agente de telemetría como el Monitor Central en esta máquina
+                <div className="p-2 rounded bg-zinc-900/60 border border-zinc-800">
+                  <strong className="text-white text-xs">[3] Instalar Ambos</strong><br />
+                  <span className="text-zinc-400 text-[10px] block mt-0.5">
+                    Servidor Todo-en-Uno (Full Stack). Instala tanto el Agente de telemetría como el Monitor Central en este mismo equipo.
                   </span>
                 </div>
-                <div>
-                  <strong className="text-red-400">[4] DESINSTALAR Y BORRAR</strong> (Limpieza Completa)<br />
-                  <span className="text-zinc-400 text-[10px] pl-4 block">
-                    - Detiene servicios, elimina reglas de firewall y borra C:\CrashingLive
+                <div className="p-2 rounded bg-zinc-900/60 border border-red-950">
+                  <strong className="text-red-400 text-xs">[4] Desinstalar componentes</strong><br />
+                  <span className="text-zinc-400 text-[10px] block mt-0.5">
+                    Limpieza completa del equipo. Detiene y borra el servicio de Windows, elimina reglas de firewall, borra archivos en C:\CrashingLive y limpia el registro.
                   </span>
                 </div>
               </div>

@@ -1053,10 +1053,10 @@ Write-Host "==========================================================" -Foregro
                   <div>
                     <div className="font-bold text-white text-xs flex items-center gap-2">
                       <span>Paquete Completo .ZIP con Wizard Instalador</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-[#00ff66] text-black font-black rounded">RECOMENDADO</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-[#00ff66] text-black font-black rounded">1 SOLA VENTANA</span>
                     </div>
                     <div className="text-[11px] text-zinc-300 mt-0.5">
-                      Contiene <strong>INSTALL_WIZARD.bat</strong>. Al ejecutarlo, <strong className="text-[#00ff66]">lo primero que muestra es el selector para elegir si este equipo será [1] Agente de Monitoreo o [2] Monitor Central</strong> (o Ambos).
+                      Contiene <strong>Instalador.bat</strong> con protección anti-bucle UAC (no abre ventanas repetidas). Abre directamente el Wizard en una sola consola con las 4 opciones: <strong className="text-[#00ff66]">[1] Instalar Agente, [2] Instalar Monitor, [3] Instalar Ambos o [4] Desinstalar componentes</strong>.
                     </div>
                   </div>
                 </div>

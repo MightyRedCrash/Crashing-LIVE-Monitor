@@ -16,7 +16,8 @@ import {
   Radio, 
   Laptop,
   HelpCircle,
-  Smartphone 
+  Smartphone,
+  Zap
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -28,6 +29,7 @@ interface HeaderProps {
   pendingApprovals: DisruptiveApproval[];
   onOpenApprovals: () => void;
   onOpenRemoteModal: () => void;
+  onOpenDirectAnydesk?: () => void;
   onOpenWizard: () => void;
   onOpenHelp: () => void;
   onOpenAndroidSim: () => void;
@@ -49,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   pendingApprovals,
   onOpenApprovals,
   onOpenRemoteModal,
+  onOpenDirectAnydesk,
   onOpenWizard,
   onOpenHelp,
   onOpenAndroidSim,
@@ -204,6 +207,19 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
               <span>{pendingCount} REINICIO/ACCIÓN</span>
+            </button>
+          )}
+
+          {/* AnyDesk Direct Connect Button */}
+          {onOpenDirectAnydesk && (
+            <button
+              onClick={onOpenDirectAnydesk}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-600/20 to-orange-600/20 hover:from-red-600/35 hover:to-orange-600/35 border border-orange-500/50 text-orange-400 font-mono text-xs font-bold transition-all shadow-[0_0_12px_rgba(255,69,0,0.2)]"
+              title="Conexión Directa estilo AnyDesk por ID de Agente o Detección Local en LAN"
+            >
+              <Zap className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
+              <span className="hidden xl:inline">AnyDesk Direct Connect</span>
+              <span className="xl:hidden">AnyDesk</span>
             </button>
           )}
 
@@ -414,6 +430,18 @@ export const Header: React.FC<HeaderProps> = ({
               <Wifi className="w-4 h-4 text-[#ff6b00]" />
               <span>Control LAN</span>
             </button>
+            {onOpenDirectAnydesk && (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenDirectAnydesk();
+                }}
+                className="p-2.5 rounded-lg bg-orange-950/40 border border-orange-600/40 text-left flex items-center gap-2 text-orange-400 font-bold"
+              >
+                <Zap className="w-4 h-4 text-orange-400 fill-orange-400" />
+                <span>AnyDesk Direct Connect</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 setMobileMenuOpen(false);

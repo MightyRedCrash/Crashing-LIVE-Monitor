@@ -163,6 +163,9 @@ export interface ConnectedServer {
   status: 'ONLINE' | 'OFFLINE' | 'CONNECTING';
   latencyMs: number;
   lastPing: string;
+  agentId?: string; // AnyDesk style ID: e.g. CL-948-201-143
+  isLocalDiscovered?: boolean;
+  macAddress?: string;
   cpu?: number;
   ram?: number;
   ramUsedGB?: number;
@@ -172,6 +175,23 @@ export interface ConnectedServer {
   diskReadMB?: number;
   diskWriteMB?: number;
   metricsHistory?: SystemMetricPoint[];
+}
+
+export interface AnyDeskRemoteSession {
+  remoteId: string;
+  serverName: string;
+  ipAddress: string;
+  port: number;
+  osType: string;
+  status: 'DISCONNECTED' | 'SEARCHING' | 'CONNECTING' | 'CONNECTED';
+  connectionType: 'LAN_LOCAL_DISCOVERY' | 'AGENT_ID_DIRECT';
+  fps: number;
+  latencyMs: number;
+  quality: 'HIGH' | 'BALANCED' | 'FAST';
+  sessionStartTime?: string;
+  keyboardCaptured: boolean;
+  mouseCaptured: boolean;
+  viewOnly: boolean;
 }
 
 export interface SystemComponentCheck {

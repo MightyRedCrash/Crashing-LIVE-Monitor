@@ -30,234 +30,148 @@ export async function generateInstallerZip(params: ZipConfigParams): Promise<Blo
   const dbName = params.dbName || 'crashinglive_db';
   const dbUser = params.dbUser || 'postgres';
   const dbPass = params.dbPass || 'P@ssw0rd2026!';
+  const agentId = 'CL-' + Math.floor(100 + Math.random() * 900) + '-' + Math.floor(100 + Math.random() * 900) + '-' + Math.floor(100 + Math.random() * 900);
 
   // =========================================================================
-  // 1. INSTALL_WIZARD.bat (Auto-elevable, a prueba de fallos, con menú inicial)
+  // 1. Instalador.bat / INSTALL_WIZARD.bat (Anti-Bucle, 1 Sola Ventana, 4 Opciones)
   // =========================================================================
   const batLauncher = `@echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 title Crashing Live Monitor - Wizard de Instalacion v2.6
 
-:: 1. Auto-elevacion con permisos de Administrador mediante UAC si no es admin
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo.
-    echo ========================================================================
-    echo  [i] Solicitando elevacion de permisos de Administrador...
-    echo      (Por favor, pulse "Si" en la ventana de Control de Cuentas de Usuario)
-    echo ========================================================================
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
-    exit /b
-)
+:: -------------------------------------------------------------------------
+:: 1. PROTECCION ANTI-BUCLE: Verificacion estricta de elevacion UAC
+:: -------------------------------------------------------------------------
+if "%~1"=="--elevated" goto RUN_MENU
 
-:: 2. Posicionar directorio de trabajo en la carpeta donde esta el script
+:: Comprobar si ya se esta ejecutando con privilegios de Administrador
+net session >nul 2>&1
+if %errorlevel% equ 0 goto RUN_MENU
+
+:: Solicitar elevacion EXACTAMENTE UNA VEZ pasando la bandera --elevated
+cls
+echo ========================================================================
+echo   [i] Solicitando permisos de Administrador para la instalacion...
+echo       (Por favor, pulse "Si" en la ventana de Control de Cuentas UAC)
+echo ========================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '--elevated' -WorkingDirectory '%~dp0' -Verb RunAs"
+exit /b
+
+:: -------------------------------------------------------------------------
+:: 2. WIZARD PRINCIPAL CON LAS 4 OPCIONES EXACTAS EN UNA SOLA VENTANA
+:: -------------------------------------------------------------------------
+:RUN_MENU
 cd /d "%~dp0"
+cls
+color 0A
 
 :MENU
 cls
 echo ========================================================================
-echo         CRASHING LIVE MONITOR - WIZARD INSTALADOR (v2.6)
+echo            CRASHING LIVE MONITOR - WIZARD INSTALADOR (v2.6)
 echo ========================================================================
-echo  Servidor Configurado: ${currentHost}
-echo  IP / Puerto Destino : ${currentIp}:${currentPort}
-echo  Directorio Actual   : %~dp0
+echo  Servidor Configurado : ${currentHost}
+echo  IP / Puerto Destino  : ${currentIp}:${currentPort}
+echo  ID AnyDesk Asignado  : ${agentId}
+echo  Directorio Destino   : C:\\CrashingLive
 echo ========================================================================
 echo.
-echo   POR FAVOR, SELECCIONE EL TIPO DE INSTALACION PARA ESTE EQUIPO:
+echo  SELECCIONE LA OPCION QUE DESEA EJECUTAR EN ESTE EQUIPO:
 echo.
-echo   [1] AGENTE DE MONITOREO (Para Servidores / Maquinas Monitoreadas)
-echo       -------------------------------------------------------------
-echo       - Instala el daemon en segundo plano (Python / Windows Service)
-echo       - Sensores en tiempo real de CPU, RAM, Red, Discos y Procesos
-echo       - Guardrails de PowerShell y telemetria hacia el Monitor Central
-echo       - Se registra en Programas de Windows para desinstalacion limpia
-echo       - Recomendado para: Servidores Windows Server 2022/2019 o Win 10/11
+echo   [1] Instalar Agente
+echo       - Para Servidores o Maquinas que seran Monitoreadas
+echo       - Instala el daemon en segundo plano y sensores de CPU, RAM y Red
 echo.
-echo   [2] MONITOR CENTRAL / PANEL (Para la Estacion del Administrador)
-echo       -------------------------------------------------------------
-echo       - Configura la consola web de supervision en tiempo real
-echo       - Conecta y crea las tablas en la Base de Datos PostgreSQL
-echo       - Crea el acceso directo de escritorio "Crashing Live Monitor"
-echo       - Se registra en Programas de Windows para desinstalacion limpia
-echo       - Recomendado para: El servidor central o PC del administrador
+echo   [2] Instalar Monitor
+echo       - Para la Estacion de Control del Administrador
+echo       - Configura la consola de supervision y base de datos PostgreSQL
 echo.
-echo   [3] AMBOS (Full Stack / Servidor Todo-en-Uno)
-echo       -------------------------------------------------------------
+echo   [3] Instalar Ambos
+echo       - Servidor Todo-en-Uno (Full Stack)
 echo       - Instala tanto el Agente de telemetria como el Monitor Central
-echo       - Recomendado para: Servidores unicos o pruebas locales
 echo.
-echo   [4] DESINSTALAR Y BORRAR CRASHING LIVE DE ESTE EQUIPO
-echo       -------------------------------------------------------------
-echo       - Detiene y borra el servicio de Windows
-echo       - Elimina reglas de firewall, archivos en C:\\CrashingLive
-echo       - Desregistra la app de Programas y Caracteristicas de Windows
+echo   [4] Desinstalar componentes
+echo       - Limpieza completa del equipo
+echo       - Detiene servicios, elimina reglas de firewall y borra archivos
 echo.
-echo   [5] SALIR
+echo   [5] Salir
 echo.
 echo ========================================================================
 set "OPCION="
 set /p OPCION=" Seleccione una opcion [1, 2, 3, 4 o 5] y presione ENTER: "
 
-if "%OPCION%"=="1" goto INSTALAR_AGENTE
-if "%OPCION%"=="2" goto INSTALAR_MONITOR
-if "%OPCION%"=="3" goto INSTALAR_AMBOS
-if "%OPCION%"=="4" goto DESINSTALAR
-if "%OPCION%"=="5" goto SALIR
+if "%OPCION%"=="1" goto OP_AGENTE
+if "%OPCION%"=="2" goto OP_MONITOR
+if "%OPCION%"=="3" goto OP_AMBOS
+if "%OPCION%"=="4" goto OP_DESINSTALAR
+if "%OPCION%"=="5" goto OP_SALIR
 
 echo.
-echo  [!] Opcion no valida. Por favor ingrese 1, 2, 3, 4 o 5.
+echo  [!] Opcion invalida. Ingrese 1, 2, 3, 4 o 5.
 timeout /t 2 >nul
 goto MENU
 
-:INSTALAR_AGENTE
+:OP_AGENTE
 cls
 echo ========================================================================
-echo  [+] INICIANDO INSTALACION DEL AGENTE DE MONITOREO...
+echo  [+] INICIANDO: INSTALAR AGENTE
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Agent
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Wizard_Instalador.ps1" -Mode Agent
 goto FIN
 
-:INSTALAR_MONITOR
+:OP_MONITOR
 cls
 echo ========================================================================
-echo  [+] INICIANDO CONFIGURACION DEL MONITOR CENTRAL...
+echo  [+] INICIANDO: INSTALAR MONITOR
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Monitor
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Wizard_Instalador.ps1" -Mode Monitor
 goto FIN
 
-:INSTALAR_AMBOS
+:OP_AMBOS
 cls
 echo ========================================================================
-echo  [+] INICIANDO INSTALACION COMBINADA (AGENTE + MONITOR)...
+echo  [+] INICIANDO: INSTALAR AMBOS (AGENTE + MONITOR)
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Both
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Wizard_Instalador.ps1" -Mode Both
 goto FIN
 
-:DESINSTALAR
+:OP_DESINSTALAR
 cls
 echo ========================================================================
-echo  [+] INICIANDO DESINSTALACION COMPLETA Y LIMPIEZA...
+echo  [+] INICIANDO: DESINSTALAR COMPONENTES
 echo ========================================================================
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\uninstall.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"
 goto FIN
 
 :FIN
 echo.
 echo ========================================================================
-echo  El proceso ha finalizado.
+echo  [✔] El proceso ha finalizado correctamente.
 echo ========================================================================
 echo.
 pause
-exit /b 0
+goto MENU
 
-:SALIR
+:OP_SALIR
 exit /b 0
 `;
 
   // =========================================================================
-  // 1.1 INSTALADOR_DIRECTO_AGENTE.bat (Acceso directo para instalar solo Agente)
-  // =========================================================================
-  const batAgentOnly = `@echo off
-setlocal EnableExtensions
-title Crashing Live - Instalador Agente de Monitoreo
-
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [i] Solicitando permisos de Administrador...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
-    exit /b
-)
-
-cd /d "%~dp0"
-cls
-echo ========================================================================
-echo  [+] INSTALACION DIRECTA: AGENTE DE MONITOREO (CRASHING LIVE)
-echo ========================================================================
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Agent
-echo.
-pause
-exit /b 0
-`;
-
-  // =========================================================================
-  // 1.2 INSTALADOR_DIRECTO_MONITOR.bat (Acceso directo para instalar solo Monitor)
-  // =========================================================================
-  const batMonitorOnly = `@echo off
-setlocal EnableExtensions
-title Crashing Live - Instalador Monitor Central
-
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [i] Solicitando permisos de Administrador...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
-    exit /b
-)
-
-cd /d "%~dp0"
-cls
-echo ========================================================================
-echo  [+] INSTALACION DIRECTA: MONITOR CENTRAL / PANEL (CRASHING LIVE)
-echo ========================================================================
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\Wizard_Instalador.ps1" -Mode Monitor
-echo.
-pause
-exit /b 0
-`;
-
-  // =========================================================================
-  // 1.3 DESINSTALAR_COMPLETO.bat (Lanzador directo para desinstalar)
-  // =========================================================================
-  const batUninstallOnly = `@echo off
-setlocal EnableExtensions
-title Crashing Live - Desinstalador Oficial de la Suite
-
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [i] Solicitando permisos de Administrador para desinstalar...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
-    exit /b
-)
-
-cd /d "%~dp0"
-cls
-echo ========================================================================
-echo  DESINSTALADOR OFICIAL DE CRASHING LIVE MONITOR Y AGENTE
-echo ========================================================================
-echo.
-echo  ADVERTENCIA: Esta accion detendra los servicios de monitoreo,
-echo  eliminara las reglas de Firewall, borrara C:\\CrashingLive y
-echo  desregistrara la aplicacion de "Programas y caracteristicas" de Windows.
-echo.
-set /p CONFIRM=" ¿Esta seguro de que desea desinstalar Crashing Live? [S/N]: "
-if /i not "%CONFIRM%"=="S" (
-    echo.
-    echo  Operacion cancelada por el usuario.
-    pause
-    exit /b 0
-)
-
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\\uninstall.ps1"
-echo.
-pause
-exit /b 0
-`;
-
-  // =========================================================================
-  // 2. Wizard_Instalador.ps1 (Asistente PowerShell que registra en Windows)
+  // 2. Wizard_Instalador.ps1 (Motor PowerShell Modular con las 4 Opciones)
   // =========================================================================
   const psWizard = `<#
 .SYNOPSIS
     Crashing Live Monitor - Setup Wizard Script
 .DESCRIPTION
-    Instalador interactivo y modular con soporte para Agente y Monitor.
-    Registra automáticamente el software en "Programas y características" (appwiz.cpl).
+    Asistente modular en una sola consola con soporte para:
+    1. Instalar Agente
+    2. Instalar Monitor
+    3. Instalar Ambos
+    4. Desinstalar componentes
 #>
 
 param(
@@ -274,38 +188,40 @@ $DbHost     = "${dbHost}"
 $DbPort     = ${dbPort}
 $DbName     = "${dbName}"
 $DbUser     = "${dbUser}"
+$AgentId    = "${agentId}"
 $InstallDir = "C:\\CrashingLive"
 
-function Show-Banner {
-    Clear-Host
+function Show-Header {
     Write-Host "========================================================================" -ForegroundColor Green
     Write-Host "         CRASHING LIVE MONITOR - WIZARD DE INSTALACION V2.6             " -ForegroundColor White
     Write-Host "========================================================================" -ForegroundColor Green
-    Write-Host " Host Configurado: $HostName" -ForegroundColor Cyan
-    Write-Host " IP / Puerto     : ${currentIp}:$ListenPort" -ForegroundColor Cyan
-    Write-Host " Directorio Base : $InstallDir" -ForegroundColor Cyan
+    Write-Host " Host Configurado : $HostName" -ForegroundColor Cyan
+    Write-Host " IP / Puerto      : ${currentIp}:$ListenPort" -ForegroundColor Cyan
+    Write-Host " ID AnyDesk Asign : $AgentId" -ForegroundColor Cyan
+    Write-Host " Directorio Base  : $InstallDir" -ForegroundColor Cyan
     Write-Host "========================================================================" -ForegroundColor Green
     Write-Host ""
 }
 
 # Menu interactivo si se llamo sin parametro -Mode
 if ($Mode -eq "Interactive") {
-    Show-Banner
-    Write-Host "POR FAVOR, SELECCIONE QUE DESEA INSTALAR EN ESTE EQUIPO:" -ForegroundColor Yellow
+    Clear-Host
+    Show-Header
+    Write-Host "SELECCIONE LA OPCION QUE DESEA EJECUTAR EN ESTE EQUIPO:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host " [1] AGENTE DE MONITOREO (Para Servidores / Maquinas Monitoreadas)" -ForegroundColor White
-    Write-Host "     Instala el daemon en segundo plano en C:\\CrashingLive y reporta metricas." -ForegroundColor Gray
+    Write-Host " [1] Instalar Agente" -ForegroundColor White
+    Write-Host "     Instala el daemon en segundo plano en C:\\CrashingLive y reporta telemetria." -ForegroundColor Gray
     Write-Host ""
-    Write-Host " [2] MONITOR CENTRAL / PANEL (Para la Estacion del Administrador)" -ForegroundColor White
+    Write-Host " [2] Instalar Monitor" -ForegroundColor White
     Write-Host "     Configura la consola web de supervision y base de datos PostgreSQL." -ForegroundColor Gray
     Write-Host ""
-    Write-Host " [3] AMBOS (Full Stack / Servidor Todo-en-Uno)" -ForegroundColor White
+    Write-Host " [3] Instalar Ambos" -ForegroundColor White
     Write-Host "     Instala tanto el Agente como el Monitor en esta misma maquina." -ForegroundColor Gray
     Write-Host ""
-    Write-Host " [4] DESINSTALAR Y BORRAR Crashing Live de este equipo" -ForegroundColor White
+    Write-Host " [4] Desinstalar componentes" -ForegroundColor White
     Write-Host "     Detiene servicios, elimina reglas de firewall y desregistra de Windows." -ForegroundColor Gray
     Write-Host ""
-    Write-Host " [5] Cancelar" -ForegroundColor Gray
+    Write-Host " [5] Salir" -ForegroundColor Gray
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Green
 
@@ -316,7 +232,7 @@ if ($Mode -eq "Interactive") {
         "3" { $Mode = "Both" }
         "4" { $Mode = "Uninstall" }
         Default {
-            Write-Host "[-] Instalacion cancelada por el usuario." -ForegroundColor Yellow
+            Write-Host "[-] Operacion cancelada por el usuario." -ForegroundColor Yellow
             Exit 0
         }
     }
@@ -332,19 +248,19 @@ function Setup-UninstallFiles {
         Copy-Item -Path $UninstPs1 -Destination "$InstallDir\\uninstall.ps1" -Force
     }
 
-    $UninstBat = Join-Path $ScriptDir "DESINSTALAR_COMPLETO.bat"
+    $UninstBat = Join-Path $ScriptDir "Instalador.bat"
     if (Test-Path $UninstBat) {
         Copy-Item -Path $UninstBat -Destination "$InstallDir\\uninstall.bat" -Force
     }
 }
 
 # =========================================================================
-# FUNCION 1: INSTALACION DEL AGENTE HOST Y REGISTRO EN WINDOWS
+# FUNCION 1: INSTALAR AGENTE
 # =========================================================================
 function Install-AgentModule {
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Green
-    Write-Host " [Paso 1/2] INSTALANDO AGENTE DE MONITOREO..." -ForegroundColor White
+    Write-Host " [PASO] INSTALANDO AGENTE DE MONITOREO..." -ForegroundColor White
     Write-Host "========================================================================" -ForegroundColor Green
 
     try {
@@ -369,7 +285,7 @@ function Install-AgentModule {
         $ConfigSrc = Join-Path $ScriptDir "config.json"
         if (Test-Path $ConfigSrc) {
             Copy-Item -Path $ConfigSrc -Destination "$InstallDir\\config.json" -Force
-            Write-Host "    [OK] config.json copiado." -ForegroundColor Green
+            Write-Host "    [OK] config.json copiado (ID AnyDesk: $AgentId)." -ForegroundColor Green
         }
 
         # Preparar desinstalador
@@ -380,26 +296,26 @@ function Install-AgentModule {
         $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
         if ($PythonExe) {
             Write-Host "    [OK] Python detectado: $PythonExe" -ForegroundColor Green
-            Write-Host "[+] Verificando paquetes psutil y psycopg2-binary..." -ForegroundColor Cyan
+            Write-Host "[+] Verificando paquetes psutil..." -ForegroundColor Cyan
             try {
-                & python -m pip install --upgrade psutil psycopg2-binary --quiet
-                Write-Host "    [OK] Dependencias instaladas correctamente." -ForegroundColor Green
+                & python -m pip install psutil --quiet
+                Write-Host "    [OK] Dependencia psutil lista." -ForegroundColor Green
             } catch {
-                Write-Host "    [*] Verifique conexion a internet para pip." -ForegroundColor Yellow
+                Write-Host "    [*] Verifique conexion para pip o instale manualmente." -ForegroundColor Yellow
             }
         } else {
-            Write-Host "    [!] Python no encontrado en PATH del sistema." -ForegroundColor Yellow
-            Write-Host "    [i] Si lo desea, instale Python 3.10+ desde https://python.org" -ForegroundColor Gray
+            Write-Host "    [!] Python no detectado en PATH. Puede descargarlo desde python.org." -ForegroundColor Yellow
         }
 
         # 4. Regla de Windows Firewall
-        Write-Host "[+] Verificando regla de Windows Firewall para puerto TCP $ListenPort..." -ForegroundColor Cyan
+        Write-Host "[+] Verificando regla de Windows Firewall para puertos $ListenPort y 8444..." -ForegroundColor Cyan
         $FwRule = Get-NetFirewallRule -DisplayName "Crashing Live Agent Inbound" -ErrorAction SilentlyContinue
         if (-not $FwRule) {
             New-NetFirewallRule -DisplayName "Crashing Live Agent Inbound" -Direction Inbound -Protocol TCP -LocalPort $ListenPort -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
-            Write-Host "    [OK] Regla de Firewall creada para puerto $ListenPort." -ForegroundColor Green
+            New-NetFirewallRule -DisplayName "Crashing Live Agent Discovery" -Direction Inbound -Protocol UDP -LocalPort 8444 -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
+            Write-Host "    [OK] Reglas de Firewall creadas." -ForegroundColor Green
         } else {
-            Write-Host "    [OK] Regla de Firewall ya existia." -ForegroundColor Green
+            Write-Host "    [OK] Reglas de Firewall ya existian." -ForegroundColor Green
         }
 
         # 5. Servicio de Windows
@@ -418,11 +334,11 @@ function Install-AgentModule {
                 Start-Service -Name $SvcName -ErrorAction SilentlyContinue
                 Write-Host "    [OK] Servicio registrado con inicio automatico." -ForegroundColor Green
             } else {
-                Write-Host "    [*] Guardado para inicio manual: $InstallDir\\agent_daemon.py" -ForegroundColor Yellow
+                Write-Host "    [*] Guardado para ejecucion directa: $InstallDir\\agent_daemon.py" -ForegroundColor Yellow
             }
         }
 
-        # 6. Registrar en "Agregar o quitar programas" de Windows
+        # 6. Registrar en "Programas y caracteristicas" de Windows
         Write-Host "[+] Registrando en Programas y Caracteristicas de Windows..." -ForegroundColor Cyan
         $RegKey = "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CrashingLiveAgent"
         if (-not (Test-Path $RegKey)) {
@@ -433,38 +349,35 @@ function Install-AgentModule {
         Set-ItemProperty -Path $RegKey -Name "Publisher" -Value "Crashing Live Systems" -Force
         Set-ItemProperty -Path $RegKey -Name "InstallLocation" -Value "$InstallDir" -Force
         Set-ItemProperty -Path $RegKey -Name "UninstallString" -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \`"$InstallDir\\uninstall.ps1\`"" -Force
-        Set-ItemProperty -Path $RegKey -Name "QuietUninstallString" -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \`"$InstallDir\\uninstall.ps1\`"" -Force
         Set-ItemProperty -Path $RegKey -Name "DisplayIcon" -Value "powershell.exe" -Force
-        Set-ItemProperty -Path $RegKey -Name "URLInfoAbout" -Value "http://${currentIp}:$ListenPort" -Force
         Set-ItemProperty -Path $RegKey -Name "EstimatedSize" -Value 18500 -Force
-        Set-ItemProperty -Path $RegKey -Name "NoModify" -Value 1 -Force
-        Set-ItemProperty -Path $RegKey -Name "NoRepair" -Value 1 -Force
-        Write-Host "    [OK] Registrado en Windows (desinstalable desde Panel de Control / Configuracion)." -ForegroundColor Green
+        Write-Host "    [OK] Registrado en Windows para desinstalacion limpia." -ForegroundColor Green
 
         Write-Host ""
-        Write-Host " [✔] AGENTE DE MONITOREO INSTALADO EXITOSAMENTE." -ForegroundColor Green
-        Write-Host "     Carpeta: $InstallDir" -ForegroundColor White
-        Write-Host "     Logs:    $InstallDir\\logs\\agent.log" -ForegroundColor White
+        Write-Host " [✔] AGENTE INSTALADO EXITOSAMENTE." -ForegroundColor Green
+        Write-Host "     ID AnyDesk : $AgentId" -ForegroundColor Cyan
+        Write-Host "     Directorio : $InstallDir" -ForegroundColor White
+        Write-Host "     Logs       : $InstallDir\\logs\\agent.log" -ForegroundColor White
     }
     catch {
-        Write-Host "[!] Error durante instalacion del Agente: $_" -ForegroundColor Red
+        Write-Host "[!] Error durante la instalacion del Agente: $_" -ForegroundColor Red
     }
 }
 
 # =========================================================================
-# FUNCION 2: CONFIGURACION DEL MONITOR CENTRAL Y REGISTRO EN WINDOWS
+# FUNCION 2: INSTALAR MONITOR
 # =========================================================================
 function Install-MonitorModule {
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Green
-    Write-Host " [Paso 2/2] CONFIGURANDO MONITOR CENTRAL Y PANEL..." -ForegroundColor White
+    Write-Host " [PASO] CONFIGURANDO MONITOR CENTRAL Y PANEL..." -ForegroundColor White
     Write-Host "========================================================================" -ForegroundColor Green
 
     try {
         Setup-UninstallFiles
 
         # 1. Regla de Firewall para el puerto del Monitor
-        Write-Host "[+] Abriendo puerto de servicio TCP $ListenPort en Firewall..." -ForegroundColor Cyan
+        Write-Host "[+] Abriendo puerto TCP $ListenPort en Windows Firewall..." -ForegroundColor Cyan
         $FwMon = Get-NetFirewallRule -DisplayName "Crashing Live Monitor Port" -ErrorAction SilentlyContinue
         if (-not $FwMon) {
             New-NetFirewallRule -DisplayName "Crashing Live Monitor Port" -Direction Inbound -Protocol TCP -LocalPort $ListenPort -Action Allow -Profile Any -ErrorAction SilentlyContinue | Out-Null
@@ -479,48 +392,44 @@ function Install-MonitorModule {
         if ($PsqlCmd) {
             $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
             if (-not $ScriptDir) { $ScriptDir = $PSScriptRoot }
-            $SchemaPath = Join-Path $ScriptDir "schema.sql"
-            if (Test-Path $SchemaPath) {
-                Write-Host "    [+] Aplicando esquema schema.sql a '$DbName'..." -ForegroundColor Cyan
+            $SchemaFile = Join-Path $ScriptDir "schema.sql"
+            if (Test-Path $SchemaFile) {
+                Write-Host "    [*] Aplicando esquema relacional schema.sql..." -ForegroundColor Cyan
                 $env:PGPASSWORD = "${dbPass}"
-                & psql -h $DbHost -p $DbPort -U $DbUser -d $DbName -f $SchemaPath 2>$null
-                Write-Host "    [OK] Tablas de telemetria y servidores sincronizadas." -ForegroundColor Green
+                & psql -h "$DbHost" -p "$DbPort" -U "$DbUser" -d "$DbName" -f "$SchemaFile" 2>$null
+                Write-Host "    [OK] Esquema de base de datos verificado." -ForegroundColor Green
             }
         } else {
-            Write-Host "    [*] psql.exe no esta en el PATH. Puede importar 'schema.sql' en pgAdmin cuando guste." -ForegroundColor Gray
+            Write-Host "    [*] PostgreSQL cliente no detectado en PATH (continuando sin error)." -ForegroundColor Gray
         }
 
-        # 3. Acceso Directo de Escritorio
+        # 3. Acceso Directo en el Escritorio
         Write-Host "[+] Creando acceso directo en el Escritorio..." -ForegroundColor Cyan
         try {
-            $Wsh = New-Object -ComObject WScript.Shell
             $Desktop = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Desktop)
-            $Sc = $Wsh.CreateShortcut("$Desktop\\Crashing Live Monitor.url")
+            $WshShell = New-Object -ComObject WScript.Shell
+            $Sc = $WshShell.CreateShortcut("$Desktop\\Crashing Live Monitor.url")
             $Sc.TargetPath = "http://localhost:$ListenPort"
             $Sc.Save()
             Write-Host "    [OK] Acceso directo 'Crashing Live Monitor' creado en el Escritorio." -ForegroundColor Green
         } catch {
-            Write-Host "    [*] URL del Panel: http://localhost:$ListenPort" -ForegroundColor Gray
+            Write-Host "    [*] Acceso web: http://localhost:$ListenPort" -ForegroundColor Gray
         }
 
-        # 4. Registrar en "Agregar o quitar programas" de Windows
-        Write-Host "[+] Registrando en Programas y Caracteristicas de Windows..." -ForegroundColor Cyan
+        # 4. Registrar en "Programas y caracteristicas" de Windows
+        Write-Host "[+] Registrando Monitor en Programas de Windows..." -ForegroundColor Cyan
         $RegKey = "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CrashingLiveMonitor"
         if (-not (Test-Path $RegKey)) {
             New-Item -Path $RegKey -Force -ErrorAction SilentlyContinue | Out-Null
         }
-        Set-ItemProperty -Path $RegKey -Name "DisplayName" -Value "Crashing Live Monitor - Panel de Control Central" -Force
+        Set-ItemProperty -Path $RegKey -Name "DisplayName" -Value "Crashing Live Monitor - Consola Central" -Force
         Set-ItemProperty -Path $RegKey -Name "DisplayVersion" -Value "2.6.4" -Force
         Set-ItemProperty -Path $RegKey -Name "Publisher" -Value "Crashing Live Systems" -Force
         Set-ItemProperty -Path $RegKey -Name "InstallLocation" -Value "$InstallDir" -Force
         Set-ItemProperty -Path $RegKey -Name "UninstallString" -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \`"$InstallDir\\uninstall.ps1\`"" -Force
-        Set-ItemProperty -Path $RegKey -Name "QuietUninstallString" -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \`"$InstallDir\\uninstall.ps1\`"" -Force
         Set-ItemProperty -Path $RegKey -Name "DisplayIcon" -Value "powershell.exe" -Force
-        Set-ItemProperty -Path $RegKey -Name "URLInfoAbout" -Value "http://localhost:$ListenPort" -Force
         Set-ItemProperty -Path $RegKey -Name "EstimatedSize" -Value 32500 -Force
-        Set-ItemProperty -Path $RegKey -Name "NoModify" -Value 1 -Force
-        Set-ItemProperty -Path $RegKey -Name "NoRepair" -Value 1 -Force
-        Write-Host "    [OK] Registrado en Windows (desinstalable desde Panel de Control / Configuracion)." -ForegroundColor Green
+        Write-Host "    [OK] Registrado en Windows para desinstalacion limpia." -ForegroundColor Green
 
         Write-Host ""
         Write-Host " [✔] MONITOR CENTRAL CONFIGURADO EXITOSAMENTE." -ForegroundColor Green
@@ -528,7 +437,7 @@ function Install-MonitorModule {
         Write-Host "     Acceso en Red: http://${currentIp}:$ListenPort" -ForegroundColor Cyan
     }
     catch {
-        Write-Host "[!] Error durante configuracion del Monitor: $_" -ForegroundColor Red
+        Write-Host "[!] Error durante la configuracion del Monitor: $_" -ForegroundColor Red
     }
 }
 
@@ -547,83 +456,75 @@ if ($Mode -eq "Agent") {
     if (-not $ScriptDir) { $ScriptDir = $PSScriptRoot }
     & (Join-Path $ScriptDir "uninstall.ps1")
 }
-
-Write-Host ""
-Write-Host "========================================================================" -ForegroundColor Green
-Write-Host " [✔] ASISTENTE COMPLETADO CON EXITO!                                    " -ForegroundColor Green
-Write-Host " Modo instalado: $Mode" -ForegroundColor White
-Write-Host "========================================================================" -ForegroundColor Green
-Write-Host ""
 `;
 
   // =========================================================================
-  // 3. uninstall.ps1 (Desinstalador Completo y Limpieza de Registro)
+  // 3. uninstall.ps1 (Desinstalador Limpio en 1 Sola Ventana)
   // =========================================================================
   const psUninstall = `<#
 .SYNOPSIS
-    Crashing Live Monitor - Complete Clean Uninstaller
+    Crashing Live Monitor - Clean Uninstaller
 .DESCRIPTION
     Detiene servicios, elimina reglas de firewall, borra C:\\CrashingLive
-    y desregistra la aplicación de "Programas y características" de Windows.
+    y desregistra la aplicación de Windows.
 #>
 
 $ErrorActionPreference = "SilentlyContinue"
 
-Clear-Host
 Write-Host "========================================================================" -ForegroundColor Yellow
 Write-Host "   DESINSTALANDO CRASHING LIVE MONITOR Y AGENTE DE ESTE EQUIPO...       " -ForegroundColor White
 Write-Host "========================================================================" -ForegroundColor Yellow
 Write-Host ""
 
 # 1. Detener y desregistrar Servicio de Windows
-Write-Host "[1/6] Deteniendo servicio 'CrashingLiveDaemon'..." -ForegroundColor Cyan
+Write-Host "[1/5] Deteniendo servicio 'CrashingLiveDaemon'..." -ForegroundColor Cyan
 Stop-Service -Name "CrashingLiveDaemon" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
-Write-Host "[2/6] Eliminando servicio 'CrashingLiveDaemon' de Windows..." -ForegroundColor Cyan
+Write-Host "[2/5] Eliminando servicio 'CrashingLiveDaemon' de Windows..." -ForegroundColor Cyan
 & sc.exe delete "CrashingLiveDaemon" | Out-Null
 
 # 2. Terminar procesos Python activos de CrashingLive
-Write-Host "[3/6] Finalizando procesos remanentes en memoria..." -ForegroundColor Cyan
+Write-Host "[3/5] Finalizando procesos remanentes en memoria..." -ForegroundColor Cyan
 Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*CrashingLive*" -or $_.CommandLine -like "*agent_daemon.py*" } | Stop-Process -Force -ErrorAction SilentlyContinue
 
 # 3. Eliminar reglas de Firewall
-Write-Host "[4/6] Eliminando reglas de entrada en Windows Firewall..." -ForegroundColor Cyan
+Write-Host "[4/5] Eliminando reglas de entrada en Windows Firewall..." -ForegroundColor Cyan
 Remove-NetFirewallRule -DisplayName "Crashing Live Agent Inbound" -ErrorAction SilentlyContinue
-Remove-NetFirewallRule -DisplayName "Crashing Live Agent Port" -ErrorAction SilentlyContinue
+Remove-NetFirewallRule -DisplayName "Crashing Live Agent Discovery" -ErrorAction SilentlyContinue
 Remove-NetFirewallRule -DisplayName "Crashing Live Monitor Port" -ErrorAction SilentlyContinue
-Remove-NetFirewallRule -DisplayName "Crashing Live Monitor Central" -ErrorAction SilentlyContinue
 
 # 4. Eliminar accesos directos
-Write-Host "[5/6] Eliminando accesos directos del Escritorio..." -ForegroundColor Cyan
 $Desktop = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Desktop)
 $CommonDesktop = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonDesktopDirectory)
 Remove-Item -Path "$Desktop\\Crashing Live Monitor.url" -Force -ErrorAction SilentlyContinue
 Remove-Item -Path "$CommonDesktop\\Crashing Live Monitor.url" -Force -ErrorAction SilentlyContinue
 
-# 5. Desregistrar de Programas y Caracteristicas de Windows (Uninstall Registry Key)
-Write-Host "[6/6] Desregistrando de 'Programas y Caracteristicas' de Windows..." -ForegroundColor Cyan
+# 5. Desregistrar de Programas y Caracteristicas de Windows
+Write-Host "[5/5] Desregistrando de 'Programas y Caracteristicas' de Windows..." -ForegroundColor Cyan
 Remove-Item -Path "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CrashingLiveAgent" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -Path "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CrashingLiveMonitor" -Recurse -Force -ErrorAction SilentlyContinue
 
-# 6. Borrar carpeta C:\CrashingLive
-Write-Host "[+] Limpiando archivos y directorio C:\\CrashingLive..." -ForegroundColor Cyan
-Start-Process -FilePath "cmd.exe" -ArgumentList "/c timeout /t 2 >nul & rmdir /s /q C:\\CrashingLive" -WindowStyle Hidden
+# 6. Borrar archivos de C:\CrashingLive
+Write-Host "[+] Limpiando archivos en C:\\CrashingLive..." -ForegroundColor Cyan
+if (Test-Path "C:\\CrashingLive") {
+    Get-ChildItem -Path "C:\\CrashingLive" -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+}
 
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Green
 Write-Host " [✔] CRASHING LIVE HA SIDO COMPLETAMENTE DESINSTALADO Y BORRADO.        " -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Green
 Write-Host ""
-Start-Sleep -Seconds 2
 `;
 
   // =========================================================================
-  // 4. agent_daemon.py (Daemon Python Autónomo de Telemetría)
+  // 4. agent_daemon.py (Daemon con ID AnyDesk y Beacon UDP en LAN)
   // =========================================================================
   const pythonDaemon = `"""
 Crashing Live Monitor - Autonomous Windows Telemetry Daemon
 Version: 2.6.4
+Agent ID AnyDesk: ${agentId}
 Host: ${currentHost} | Port: ${currentPort}
 """
 
@@ -631,13 +532,16 @@ import sys
 import os
 import time
 import json
+import socket
 import logging
+import threading
 import psutil
 from datetime import datetime
 
 CONFIG_PATH = r"C:\\CrashingLive\\config.json"
 
 default_config = {
+    "agent_id": "${agentId}",
     "hostname": "${currentHost}",
     "listen_port": ${currentPort},
     "db_host": "${dbHost}",
@@ -669,7 +573,32 @@ logging.basicConfig(
 )
 
 logging.info(f"Iniciando Crashing Live Agent en {config.get('hostname')}...")
+logging.info(f"Agent ID AnyDesk: {config.get('agent_id', '${agentId}')}")
 logging.info(f"Escuchando telemetria local en puerto {config.get('listen_port')}...")
+
+# Hilo de Auto-Deteccion LAN Broadcast en UDP 8444
+def lan_discovery_beacon():
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        beacon_msg = json.dumps({
+            "type": "CRASHING_LIVE_AGENT_BEACON",
+            "agent_id": config.get("agent_id", "${agentId}"),
+            "hostname": config.get("hostname", "${currentHost}"),
+            "port": config.get("listen_port", ${currentPort}),
+            "status": "ONLINE"
+        }).encode("utf-8")
+        
+        while True:
+            try:
+                sock.sendto(beacon_msg, ('<broadcast>', 8444))
+            except Exception:
+                pass
+            time.sleep(5)
+    except Exception as e:
+        logging.warning(f"Beacon UDP LAN no disponible: {e}")
+
+threading.Thread(target=lan_discovery_beacon, daemon=True).start()
 
 try:
     while True:
@@ -680,6 +609,7 @@ try:
         
         telemetry_point = {
             "timestamp": datetime.now().isoformat(),
+            "agent_id": config.get("agent_id", "${agentId}"),
             "cpu_percent": cpu,
             "ram_percent": ram.percent,
             "ram_used_gb": round(ram.used / (1024**3), 2),
@@ -709,6 +639,7 @@ CREATE TABLE IF NOT EXISTS telemetry_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     hostname VARCHAR(128) NOT NULL DEFAULT '${currentHost}',
+    agent_id VARCHAR(64) DEFAULT '${agentId}',
     cpu_percent NUMERIC(5,2) NOT NULL,
     ram_percent NUMERIC(5,2) NOT NULL,
     ram_used_gb NUMERIC(6,2) NOT NULL,
@@ -727,42 +658,16 @@ CREATE TABLE IF NOT EXISTS connected_servers (
     host VARCHAR(128) NOT NULL,
     port INTEGER NOT NULL DEFAULT ${currentPort},
     os_type VARCHAR(64) NOT NULL,
+    agent_id VARCHAR(64) DEFAULT '${agentId}',
     status VARCHAR(32) DEFAULT 'ONLINE',
     latency_ms INTEGER DEFAULT 2,
     last_ping TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Windows Services Status
-CREATE TABLE IF NOT EXISTS windows_services (
-    id VARCHAR(64) PRIMARY KEY,
-    server_id VARCHAR(64) REFERENCES connected_servers(id),
-    name VARCHAR(128) NOT NULL,
-    display_name VARCHAR(256),
-    status VARCHAR(32) NOT NULL,
-    startup_type VARCHAR(32) NOT NULL,
-    pid INTEGER,
-    memory_mb NUMERIC(8,2),
-    cpu_percent NUMERIC(5,2),
-    binary_path TEXT,
-    last_checked TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 4. Disruptive Approvals
-CREATE TABLE IF NOT EXISTS disruptive_approvals (
-    id VARCHAR(64) PRIMARY KEY,
-    server_id VARCHAR(64) REFERENCES connected_servers(id),
-    action_type VARCHAR(32) NOT NULL,
-    title VARCHAR(256) NOT NULL,
-    description TEXT,
-    risk_level VARCHAR(32) NOT NULL,
-    requested_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(32) DEFAULT 'PENDING'
-);
-
 -- Seed initial current server
-INSERT INTO connected_servers (id, name, host, port, os_type, status, latency_ms)
-VALUES ('srv-node-1', '${currentHost}', '${currentIp}', ${currentPort}, 'Windows Server 2022', 'ONLINE', 2)
+INSERT INTO connected_servers (id, name, host, port, os_type, agent_id, status, latency_ms)
+VALUES ('srv-node-1', '${currentHost}', '${currentIp}', ${currentPort}, 'Windows Server 2022', '${agentId}', 'ONLINE', 2)
 ON CONFLICT (id) DO UPDATE SET last_ping = CURRENT_TIMESTAMP;
 `;
 
@@ -773,6 +678,7 @@ ON CONFLICT (id) DO UPDATE SET last_ping = CURRENT_TIMESTAMP;
     {
       app_name: "Crashing Live Monitor Suite",
       version: "2.6.4",
+      agent_id: agentId,
       server: {
         hostname: currentHost,
         ip_address: currentIp,
@@ -801,66 +707,51 @@ ON CONFLICT (id) DO UPDATE SET last_ping = CURRENT_TIMESTAMP;
   // 7. LEEME_INSTRUCCIONES.txt (Manual de Despliegue en Español)
   // =========================================================================
   const readmeTxt = `===============================================================================
-       CRASHING LIVE MONITOR - PAQUETE OFICIAL DE INSTALACION V2.6
+       CRASHING LIVE MONITOR - WIZARD DE INSTALACION EN 1 SOLA VENTANA
 ===============================================================================
 
-Este paquete contiene el Wizard Instalador con auto-elevacion para Windows
-y registro oficial para desinstalacion limpia desde Programas de Windows.
+Este instalador abre DIRECTAMENTE una unica ventana interactiva sin bucles de
+permisos ni ventanas secundarias.
 
 -------------------------------------------------------------------------------
-1. COMO INICIAR LA INSTALACION EN WINDOWS:
+COMO USAR EL INSTALADOR:
 -------------------------------------------------------------------------------
-1. Descomprima este archivo .ZIP en cualquier carpeta de su servidor o equipo.
-2. Haga DOBLE CLIC sobre el archivo:
-   "INSTALL_WIZARD.bat"
-   
-   (El asistente solicitara permisos de Administrador de Windows de forma automatica
-    mediante el cartel de Control de Cuentas de Usuario UAC).
+1. Descomprima este archivo .ZIP en su equipo o servidor.
+2. Haga DOBLE CLIC en "Instalador.bat" (o "INSTALL_WIZARD.bat").
+3. Se abrira directamente el Wizard en una sola consola con estas 4 opciones:
 
-3. En la primera pantalla, elija que rol cumplira este equipo:
-   [1] AGENTE DE MONITOREO -> Si es un servidor/PC que va a ser monitoreado.
-   [2] MONITOR CENTRAL     -> Si es la maquina principal donde el administrador
-                              visualiza las graficas y base de datos PostgreSQL.
-   [3] AMBOS               -> Si desea instalar todo en este unico equipo.
+   [1] Instalar Agente
+       -> Para servidores o equipos que seran monitoreados.
+       -> Instala el servicio en C:\\CrashingLive con telemetria en vivo.
 
--------------------------------------------------------------------------------
-2. COMO DESINSTALAR Y BORRAR EL SOFTWARE DESDE WINDOWS:
--------------------------------------------------------------------------------
-Una vez instalado, puede desinstalar y borrar completamente Crashing Live mediante
-CUALQUIERA de estas dos formas oficiales:
+   [2] Instalar Monitor
+       -> Para la estacion del administrador.
+       -> Configura la consola web y base de datos PostgreSQL.
 
-FORMA A (Desde Windows):
-  1. Vaya a "Configuracion > Aplicaciones > Aplicaciones instaladas" en Windows 11/10
-     o abra "Panel de control > Desinstalar un programa" (appwiz.cpl).
-  2. Busque "Crashing Live Monitor" o "Crashing Live Agent".
-  3. Haga clic en los tres puntos y elija "Desinstalar".
-  4. El desinstalador automatico detendra los servicios, borrara las reglas de Firewall,
-     eliminara la carpeta C:\\CrashingLive y limpiara el registro de Windows.
+   [3] Instalar Ambos
+       -> Instalacion Full Stack todo-en-uno en esta misma maquina.
 
-FORMA B (Desde este paquete):
-  - Ejecute "DESINSTALAR_COMPLETO.bat" o elija la opcion [4] en "INSTALL_WIZARD.bat".
+   [4] Desinstalar componentes
+       -> Limpieza completa: detiene y borra el servicio de Windows,
+          elimina reglas de firewall y borra C:\\CrashingLive.
 
 -------------------------------------------------------------------------------
-3. ARCHIVOS INCLUIDOS EN ESTE PAQUETE:
+ARCHIVOS DEL PAQUETE:
 -------------------------------------------------------------------------------
-- INSTALL_WIZARD.bat             -> Asistente con selector Agente / Monitor / Desinstalar.
-- INSTALADOR_DIRECTO_AGENTE.bat  -> Instala directamente el Agente en 1 clic.
-- INSTALADOR_DIRECTO_MONITOR.bat -> Instala directamente el Monitor en 1 clic.
-- DESINSTALAR_COMPLETO.bat       -> Desinstala y borra todo de inmediato.
-- Wizard_Instalador.ps1          -> Motor PowerShell del asistente.
-- uninstall.ps1                  -> Motor de desinstalacion y limpieza profunda.
-- agent_daemon.py                -> Daemon de telemetria en Python 3.12.
-- schema.sql                     -> Esquema de tablas para PostgreSQL 16.
-- config.json                    -> Archivo de configuracion preestablecido.
+- Instalador.bat        -> Lanzador principal con proteccion anti-bucle UAC.
+- INSTALL_WIZARD.bat    -> Acceso directo equivalente.
+- Wizard_Instalador.ps1 -> Motor PowerShell modular en una sola consola.
+- uninstall.ps1         -> Desinstalador limpio y desregistro de Windows.
+- agent_daemon.py       -> Daemon Python con telemetria y beacon AnyDesk.
+- schema.sql            -> Base de datos relacional para PostgreSQL.
+- config.json           -> Archivo de configuracion con ID AnyDesk: ${agentId}
 
-Servidor configurado: ${currentHost} (${currentIp}:${currentPort})
+Servidor: ${currentHost} (${currentIp}:${currentPort})
 `;
 
-  // Añadir todos los archivos con finales de línea CRLF obligatorios para Windows
+  // Añadir los archivos con CRLF a prueba de fallos
+  zip.file('Instalador.bat', toWindowsCrlf(batLauncher));
   zip.file('INSTALL_WIZARD.bat', toWindowsCrlf(batLauncher));
-  zip.file('INSTALADOR_DIRECTO_AGENTE.bat', toWindowsCrlf(batAgentOnly));
-  zip.file('INSTALADOR_DIRECTO_MONITOR.bat', toWindowsCrlf(batMonitorOnly));
-  zip.file('DESINSTALAR_COMPLETO.bat', toWindowsCrlf(batUninstallOnly));
   zip.file('Wizard_Instalador.ps1', toWindowsCrlf(psWizard));
   zip.file('uninstall.ps1', toWindowsCrlf(psUninstall));
   zip.file('agent_daemon.py', toWindowsCrlf(pythonDaemon));

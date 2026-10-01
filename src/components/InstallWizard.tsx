@@ -41,6 +41,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({
   const [activeCodeTab, setActiveCodeTab] = useState<'python' | 'sql' | 'powershell'>('powershell');
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
   const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+  const [installFolder, setInstallFolder] = useState<string>('C:\\Program Files\\Crashing LIVE');
 
   const handleDownloadZip = async () => {
     setIsGeneratingZip(true);
@@ -53,7 +54,8 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({
         dbPort: formData.dbPort,
         dbName: formData.dbName,
         dbUser: formData.dbUser,
-        dbPass: formData.dbPass
+        dbPass: formData.dbPass,
+        installPath: installFolder
       });
       const url = URL.createObjectURL(zipBlob);
       const link = document.createElement('a');
@@ -599,18 +601,23 @@ Write-Host "==========================================================" -Foregro
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
       <div className="w-full max-w-4xl max-h-[94vh] flex flex-col rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl overflow-hidden font-mono text-xs text-white">
-        {/* Wizard Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-zinc-800 bg-zinc-900/60">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-[#ff6b00]/15 text-[#ff6b00] border border-[#ff6b00]/30 shrink-0">
-              <Wrench className="w-5 h-5" />
+        {/* Wizard Header con Logo Oficial y Nombre */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-zinc-800 bg-zinc-900/90">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-[#00ff66] text-black font-black flex items-center justify-center text-lg shadow-[0_0_15px_rgba(0,255,102,0.4)] shrink-0 border border-[#00ff66]">
+              CL
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-white uppercase tracking-wide">
-                Wizard de Instalación & Gestor de Componentes
-              </h2>
-              <p className="text-[11px] text-zinc-400">
-                Instala y actualiza todos los componentes para que el bot funcione de forma autónoma.
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-black text-white font-mono uppercase tracking-wide">
+                  CRASHING LIVE MONITOR
+                </h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-[#00ff66]/15 text-[#00ff66] border border-[#00ff66]/30">
+                  WIZARD OFICIAL
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 font-mono">
+                Asistente de Instalación & Configuración de Servidores y Puestos
               </p>
             </div>
           </div>
@@ -728,6 +735,27 @@ Write-Host "==========================================================" -Foregro
                     className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-white focus:outline-none focus:border-[#ff6b00]"
                   />
                   <span className="text-[10px] text-zinc-500">Solo los equipos dentro de estas subredes podrán conectarse para monitoreo remoto.</span>
+                </div>
+
+                {/* Directorio de Instalación Oficial */}
+                <div className="p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-white font-bold text-xs flex items-center gap-1.5">
+                      <FolderArchive className="w-3.5 h-3.5 text-[#00ff66]" />
+                      <span>Carpeta de Destino (Instalación Oficial):</span>
+                    </label>
+                    <span className="text-[10px] text-[#00ff66] font-bold">POR DEFECTO EN PROGRAM FILES</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={installFolder}
+                    onChange={(e) => setInstallFolder(e.target.value)}
+                    placeholder="C:\Program Files\Crashing LIVE"
+                    className="w-full px-3 py-2 rounded-lg bg-black border border-zinc-700 text-[#00ff66] font-bold text-xs focus:outline-none focus:border-[#00ff66]"
+                  />
+                  <p className="text-[10px] text-zinc-400 leading-relaxed">
+                    Por defecto se instalará en <strong>C:\Program Files\Crashing LIVE</strong> creando la carpeta oficial. También puede especificar cualquier otra ruta o unidad (ej: <code>D:\Crashing LIVE</code>).
+                  </p>
                 </div>
               </div>
             </div>

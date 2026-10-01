@@ -187,64 +187,77 @@ export const DeviceInstallerCenter: React.FC<DeviceInstallerCenterProps> = ({
         {/* Previsualización interactiva de la Ventana Gráfica del Wizard */}
         {showWizardPreview && (
           <div className="mt-3 p-4 rounded-2xl bg-zinc-950 border-2 border-zinc-700 font-mono text-xs text-zinc-200 animate-in fade-in space-y-3 shadow-2xl">
-            {/* Header de Ventana Estilo Windows Forms */}
+            {/* Header de Ventana Estilo Wizard Clásico con Logo Oficial */}
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div>
-                <span className="text-[#00ff66] font-bold text-sm block">
-                  CRASHING LIVE MONITOR - WIZARD DE INSTALACIÓN
-                </span>
-                <span className="text-zinc-400 text-[11px]">
-                  Servidor: {currentHost} | Puerto: {currentPort} | Carpeta: C:\Program Files\CrashingLive
-                </span>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#00ff66] text-black font-black flex items-center justify-center text-sm shadow-[0_0_12px_rgba(0,255,102,0.4)] shrink-0">
+                  CL
+                </div>
+                <div>
+                  <span className="text-[#00ff66] font-bold text-sm block">
+                    CRASHING LIVE MONITOR - ASISTENTE DE INSTALACIÓN
+                  </span>
+                  <span className="text-zinc-400 text-[11px]">
+                    Servidor: {currentHost} | IP: {currentIp}:{currentPort}
+                  </span>
+                </div>
               </div>
               <span className="px-2 py-0.5 rounded bg-zinc-850 text-cyan-300 text-[10px] font-bold border border-cyan-800/40">
-                VENTANA GRÁFICA NATIVA GUI
+                WIZARD CLÁSICO GUI
               </span>
             </div>
 
-            <div className="space-y-2.5 pt-1">
-              <span className="text-white font-bold block text-xs">
-                Seleccione la operación que desea ejecutar con un solo clic:
-              </span>
-
-              {/* Botón 1 */}
-              <div className="p-3 rounded-xl bg-zinc-900/80 border border-[#ff6b00]/60 hover:bg-zinc-850 transition-colors">
-                <span className="text-[#ff6b00] font-black text-xs block">
-                  1. Instalar Agente de Monitoreo
+            <div className="space-y-3 pt-1">
+              {/* Paso 1: Tipo de Instalación */}
+              <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                <span className="text-white font-bold block text-xs">
+                  Paso 1: Selección de Componentes
                 </span>
-                <span className="text-zinc-300 text-[11px] block mt-0.5">
-                  Instala el daemon en segundo plano en <strong>C:\Program Files\CrashingLive</strong> y reporta telemetría.
-                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded bg-zinc-950 border border-sky-400/50 text-sky-300 font-bold">
+                    (•) Instalación Completa (Agente + Monitor)
+                  </div>
+                  <div className="p-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-400">
+                    ( ) Solo Agente de Monitoreo
+                  </div>
+                </div>
               </div>
 
-              {/* Botón 2 */}
-              <div className="p-3 rounded-xl bg-zinc-900/80 border border-[#00ff66]/60 hover:bg-zinc-850 transition-colors">
-                <span className="text-[#00ff66] font-black text-xs block">
-                  2. Instalar Monitor Central / Panel
-                </span>
-                <span className="text-zinc-300 text-[11px] block mt-0.5">
-                  Configura la consola web de supervisión, base de datos PostgreSQL y crea el acceso directo en el Escritorio.
-                </span>
+              {/* Paso 2: Selección de Carpeta de Destino */}
+              <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-white font-bold block text-xs">
+                    Paso 2: Carpeta de Destino (Por defecto o Personalizada)
+                  </span>
+                  <span className="text-[#00ff66] text-[10px] font-bold">C:\Program Files\Crashing LIVE</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value="C:\Program Files\Crashing LIVE"
+                    className="flex-1 bg-black border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-[#00ff66] font-mono"
+                  />
+                  <button className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold border border-zinc-600">
+                    Examinar...
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-400">
+                  Crea automáticamente la carpeta <strong>Crashing LIVE</strong> en Archivos de Programa o en la ruta y unidad que usted especifique.
+                </p>
               </div>
 
-              {/* Botón 3 */}
-              <div className="p-3 rounded-xl bg-zinc-900/80 border border-sky-400/60 hover:bg-zinc-850 transition-colors">
-                <span className="text-sky-400 font-black text-xs block">
-                  3. Instalar Ambos (Agente + Monitor Central)
-                </span>
-                <span className="text-zinc-300 text-[11px] block mt-0.5">
-                  Servidor Todo-en-Uno (Full Stack). Instala tanto el Agente de telemetría como el Monitor Central en esta misma máquina.
-                </span>
-              </div>
-
-              {/* Botón 4 */}
-              <div className="p-3 rounded-xl bg-zinc-900/80 border border-red-500/60 hover:bg-zinc-850 transition-colors">
-                <span className="text-red-400 font-black text-xs block">
-                  4. Desinstalar componentes de Crashing Live
-                </span>
-                <span className="text-zinc-300 text-[11px] block mt-0.5">
-                  Limpieza completa: detiene servicios, elimina reglas de firewall y borra <strong>C:\Program Files\CrashingLive</strong>.
-                </span>
+              {/* Controles de Navegación de Wizard */}
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-850">
+                <span className="text-[10px] text-zinc-500">Navegación paso a paso</span>
+                <div className="flex items-center gap-2">
+                  <button className="px-3 py-1 rounded bg-zinc-850 text-zinc-400 text-xs font-bold border border-zinc-700">
+                    &lt; Atrás
+                  </button>
+                  <button className="px-4 py-1 rounded bg-[#00ff66] text-black text-xs font-black shadow-sm">
+                    Siguiente &gt;
+                  </button>
+                </div>
               </div>
             </div>
           </div>

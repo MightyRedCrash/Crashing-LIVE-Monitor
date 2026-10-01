@@ -58,8 +58,12 @@ import {
   Check,
   PackageCheck,
   Monitor,
-  Cpu
+  Cpu,
+  Loader2,
+  FolderArchive,
+  Play
 } from 'lucide-react';
+import { generateInstallerZip } from './utils/zipInstallerGenerator';
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>('dark');
@@ -201,6 +205,37 @@ export default function App() {
     netOutKB: 980,
     diskReadMB: 3.1,
     diskWriteMB: 1.4,
+  };
+
+  // ZIP Installer Downloader
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+
+  const handleDownloadZip = async () => {
+    setIsDownloadingZip(true);
+    try {
+      const zipBlob = await generateInstallerZip({
+        hostName: currentServer.name || 'WINSRV-PRIMARY-DC',
+        ipAddress: currentServer.host || '192.168.1.140',
+        port: currentServer.port || 8443,
+        dbHost: currentServer.host || '192.168.1.140',
+        dbPort: 5432,
+        dbName: 'crashinglive_db',
+        dbUser: 'postgres'
+      });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeHost = (currentServer.name || 'Server').replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.download = `CrashingLive_Installer_${safeHost}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error al generar archivo ZIP:', err);
+    } finally {
+      setIsDownloadingZip(false);
+    }
   };
 
   // Load approvals & query real host hardware on mount
@@ -820,7 +855,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* 2. Botón único "Instalar" con todos los instaladores agrupados dentro */}
+              {/* 2. Menú Hamburguesa dedicado EXCLUSIVAMENTE a la Descarga Directa del ZIP */}
               <div className="flex items-center gap-2.5">
                 <div className="relative">
                   <button
@@ -828,106 +863,73 @@ export default function App() {
                       setInstallMenuOpen(!installMenuOpen);
                       setMonitorMenuOpen(false);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all border shadow-sm ${
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-xs font-bold transition-all border shadow-sm ${
                       installMenuOpen
-                        ? 'bg-[#ff6b00] text-black border-[#ff6b00] shadow-[0_0_12px_rgba(255,107,0,0.3)]'
-                        : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-700/80 text-white hover:border-[#ff6b00]/60'
+                        ? 'bg-[#00ff66] text-black border-[#00ff66] shadow-[0_0_15px_rgba(0,255,102,0.4)]'
+                        : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-700/80 text-white hover:border-[#00ff66]/60'
                     }`}
-                    title="Desplegar instaladores de Crashing Live"
+                    title="Menú: Descarga del Instalador ZIP"
                   >
-                    <Menu className="w-3.5 h-3.5" />
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Instalar</span>
+                    <Menu className="w-4 h-4 text-[#00ff66]" />
+                    <Download className="w-3.5 h-3.5 text-zinc-300" />
+                    <span className="hidden sm:inline">Descargar ZIP</span>
                     <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${installMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
 
-                  {/* Menú de opciones de instalación */}
+                  {/* Menú Dropdown: ÚNICA Y EXCLUSIVA OPCIÓN DE DESCARGA ZIP */}
                   {installMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-2xl p-2.5 z-50 animate-in fade-in slide-in-from-top-2 font-mono text-xs">
-                      <div className="text-[10px] text-zinc-500 uppercase px-3 py-1.5 border-b border-zinc-900 flex items-center justify-between">
-                        <span>Componentes para Instalar</span>
-                        <span className="text-[#ff6b00] font-bold">3 Opciones</span>
+                    <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-zinc-950/98 backdrop-blur-xl border border-zinc-800 shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 font-mono text-xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <FolderArchive className="w-4 h-4 text-[#00ff66]" />
+                          <span className="text-white font-bold uppercase text-[11px] tracking-wide">
+                            Descargar Instalador (.ZIP)
+                          </span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-[#00ff66]/20 text-[#00ff66] text-[10px] font-black">
+                          OFICIAL
+                        </span>
                       </div>
-                      <div className="space-y-1.5 pt-2">
-                        {/* Opción 1: Agente Host */}
-                        <button
-                          onClick={() => {
-                            setMainSection('installers');
-                            setInstallMenuOpen(false);
-                          }}
-                          className="w-full text-left p-2.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-[#ff6b00]/50 transition-all flex items-start gap-2.5 group"
-                        >
-                          <Server className="w-4 h-4 text-[#ff6b00] shrink-0 mt-0.5" />
-                          <div>
-                            <div className="font-bold text-white text-xs group-hover:text-[#ff6b00] transition-colors">
-                              1. Instalador de Crashing LIVE monitoreo
-                            </div>
-                            <div className="text-[10px] text-zinc-400 mt-0.5">
-                              Host Daemon para Windows Server / Win 11 (Python & PostgreSQL)
-                            </div>
-                          </div>
-                        </button>
 
-                        {/* Opción 2: Monitor Desktop */}
-                        <button
-                          onClick={() => {
-                            setMainSection('installers');
-                            setInstallMenuOpen(false);
-                          }}
-                          className="w-full text-left p-2.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-[#00ff66]/50 transition-all flex items-start gap-2.5 group"
-                        >
-                          <Monitor className="w-4 h-4 text-[#00ff66] shrink-0 mt-0.5" />
-                          <div>
-                            <div className="font-bold text-white text-xs group-hover:text-[#00ff66] transition-colors">
-                              2. Instalador Crashing LIVE Monitor
-                            </div>
-                            <div className="text-[10px] text-zinc-400 mt-0.5">
-                              Panel de Control Desktop y Web para Administradores
-                            </div>
-                          </div>
-                        </button>
+                      <p className="text-[11px] text-zinc-300 leading-relaxed">
+                        Aloja toda la suite en <strong className="text-white">C:\Program Files\CrashingLive</strong>. Incluye el <strong>Asistente Gráfico (GUI)</strong> con las 4 opciones interactivas:
+                      </p>
 
-                        {/* Opción 3: APK Android */}
-                        <button
-                          onClick={() => {
-                            setMainSection('android');
-                            setInstallMenuOpen(false);
-                          }}
-                          className="w-full text-left p-2.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-cyan-400/50 transition-all flex items-start gap-2.5 group"
-                        >
-                          <Smartphone className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                          <div>
-                            <div className="font-bold text-white text-xs group-hover:text-cyan-400 transition-colors">
-                              3. Crashing LIVE Monitor APK
-                            </div>
-                            <div className="text-[10px] text-zinc-400 mt-0.5">
-                              App móvil para teléfonos Android (Descarga directa / QR)
-                            </div>
-                          </div>
-                        </button>
-
-                        <div className="pt-2 border-t border-zinc-850 flex items-center justify-between px-1">
-                          <button
-                            onClick={() => {
-                              setShowWizard(true);
-                              setInstallMenuOpen(false);
-                            }}
-                            className="text-[11px] text-[#ff6b00] hover:underline font-bold flex items-center gap-1"
-                          >
-                            <Wrench className="w-3.5 h-3.5" />
-                            <span>Wizard Paso a Paso</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setMainSection('installers');
-                              setInstallMenuOpen(false);
-                            }}
-                            className="text-[11px] text-zinc-400 hover:text-white"
-                          >
-                            Centro Completo →
-                          </button>
+                      <div className="space-y-1.5 text-[10px] text-zinc-400 bg-zinc-900/70 p-2.5 rounded-xl border border-zinc-850">
+                        <div className="flex items-center gap-1.5 text-zinc-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b00]" /> <strong>1. Instalar Agente</strong> (daemon de telemetría)
+                        </div>
+                        <div className="flex items-center gap-1.5 text-zinc-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66]" /> <strong>2. Instalar Monitor</strong> (consola web & postgres)
+                        </div>
+                        <div className="flex items-center gap-1.5 text-zinc-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400" /> <strong>3. Instalar Ambos</strong> (servidor todo-en-uno)
+                        </div>
+                        <div className="flex items-center gap-1.5 text-red-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> <strong>4. Desinstalar componentes</strong> (limpieza completa)
                         </div>
                       </div>
+
+                      <button
+                        onClick={() => {
+                          handleDownloadZip();
+                          setInstallMenuOpen(false);
+                        }}
+                        disabled={isDownloadingZip}
+                        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs font-mono transition-all shadow-[0_0_20px_rgba(0,255,102,0.4)] disabled:opacity-50"
+                      >
+                        {isDownloadingZip ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Empaquetando ZIP...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4" />
+                            <span>DESCARGAR ARCHIVO ZIP AHORA</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>

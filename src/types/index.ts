@@ -162,13 +162,16 @@ export interface ProcessItem {
 
 export interface ConnectedServer {
   id: string;
-  name: string;
+  name: string; // Nombre visible de referencia (customName || rawHostname)
+  rawHostname?: string; // Nombre original detectado de Windows (ej: DJFFI58684)
+  customName?: string; // Nombre personalizado asignado por el usuario (ej: Servidor Contabilidad)
   host: string;
   port: number;
   osType: string;
   token?: string;
   ssl: boolean;
   isCurrent: boolean;
+  isLocalHost?: boolean; // Verdadero si es el equipo local donde corre el monitor
   status: 'ONLINE' | 'OFFLINE' | 'CONNECTING';
   latencyMs: number;
   lastPing: string;

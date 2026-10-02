@@ -338,7 +338,7 @@ export const initialIncidents: DiagnosticIncident[] = [
 
 export const defaultWizardConfig: WizardConfig = {
   osType: 'Windows Server 2022',
-  agentHostname: 'WINSRV-2022-DC01',
+  agentHostname: 'EQUIPO-LOCAL',
   listenPort: 8443,
   listenHost: '0.0.0.0',
   allowedRemoteIps: '192.168.1.0/24, 10.0.0.0/8',

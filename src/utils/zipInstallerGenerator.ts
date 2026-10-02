@@ -174,12 +174,35 @@ CORRECCIÓN TOTAL DE ACENTOS Y CARACTERES EN ESPAÑOL:
   nativamente en Unicode / UTF-16, garantizando la correcta visualización de
   acentos (á, é, í, ó, ú) y la letra eñe (ñ, Ñ) en todo el sistema operativo.
 
+LOGO EN LA BARRA DE TAREAS:
+-----------------------------
+* Al ejecutarse, el logo oficial figura directamente en la barra de tareas de
+  Windows (identificado mediante AppUserModelID exclusivo), tanto para el
+  Monitor como para el Agente y el Asistente de Instalación.
+
+AGENTE COMO SERVICIO DE WINDOWS (INICIO AUTOMÁTICO):
+---------------------------------------------------
+* El Agente Host se instala y registra como un verdadero Servicio de Windows:
+    Nombre del servicio: CrashingLiveAgent
+    Tipo de inicio: AUTOMÁTICO (Inicia con el arranque de Windows)
+* No requiere que un usuario inicie sesión en Windows: el servicio se inicia
+  automáticamente con el encendido del equipo y emite telemetría continuamente.
+* En caso de reinicio imprevisto o error, el servicio se auto-recupera de inmediato.
+
+INSTALACIÓN DE SOLO AGENTE (SIN MONITOR):
+-----------------------------------------
+* Si en el instalador selecciona "Solo Agente Host":
+  - Se registra el servicio de fondo con inicio automático.
+  - El acceso directo en el Escritorio abre una ventana enfocada y limpia que
+    muestra ÚNICAMENTE el ID de Conexión y el Estado de Reporte en vivo
+    (con opción para copiar el ID de enlace al portapapeles con un clic).
+
 ACCESOS DIRECTOS EN EL ESCRITORIO:
 ----------------------------------
 * Si elige "Instalar Ambos (Recomendado)":
   Se generarán 2 accesos directos en el Escritorio con el logo oficial:
     1) "Crashing LIVE - Monitor Desktop" (para supervisar la infraestructura)
-    2) "Crashing LIVE - Agente Host" (para emitir telemetría continua)
+    2) "Crashing LIVE - Agente Host" (para ver ID y estado de reporte)
 * Si elige "Solo Agente Host":
   Se generará ÚNICAMENTE el acceso directo al Agente.
 * Si elige "Solo Monitor Central":
@@ -319,11 +342,25 @@ if ($Mode -in "Agent", "Monitor", "Both") {
         Write-Host "  [OK] Acceso directo al Agente Host generado en el Escritorio." -ForegroundColor Green
     }
 
+    # Registrar Servicio de Windows con inicio automático
+    if ($Mode -in "Agent", "Both") {
+        Write-Host "  [+] Configurando Servicio de Windows CrashingLiveAgent (Inicio Automático)..." -ForegroundColor Cyan
+        sc.exe stop CrashingLiveAgent 2>$null | Out-Null
+        sc.exe delete CrashingLiveAgent 2>$null | Out-Null
+        sc.exe create CrashingLiveAgent binPath= "`"$AgExe`" --service" start= auto DisplayName= "Crashing LIVE Telemetry Agent" | Out-Null
+        sc.exe description CrashingLiveAgent "Servicio de telemetria continua y supervision en segundo plano de Crashing LIVE" | Out-Null
+        sc.exe failure CrashingLiveAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+        sc.exe start CrashingLiveAgent 2>$null | Out-Null
+        Write-Host "  [OK] Servicio CrashingLiveAgent registrado e iniciado con arranque automático." -ForegroundColor Green
+    }
+
     Write-Host ("[✔] Crashing LIVE instalado exitosamente en " + $TargetDir) -ForegroundColor Green
 }
 
 if ($Mode -eq "Uninstall") {
     Write-Host ("[+] Desinstalando de " + $TargetDir + "...") -ForegroundColor Yellow
+    sc.exe stop CrashingLiveAgent 2>$null | Out-Null
+    sc.exe delete CrashingLiveAgent 2>$null | Out-Null
     Remove-Item -Path ($Desktop + "\\Crashing LIVE - Monitor Desktop.lnk") -Force -ErrorAction SilentlyContinue
     Remove-Item -Path ($Desktop + "\\Crashing LIVE - Agente Host.lnk") -Force -ErrorAction SilentlyContinue
     Remove-NetFirewallRule -DisplayName "Crashing Live Agent Inbound" -ErrorAction SilentlyContinue

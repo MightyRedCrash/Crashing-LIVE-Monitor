@@ -347,7 +347,8 @@ if ($Mode -in "Agent", "Monitor", "Both") {
         Write-Host "  [+] Configurando Servicio de Windows CrashingLiveAgent (Inicio Automático)..." -ForegroundColor Cyan
         sc.exe stop CrashingLiveAgent 2>$null | Out-Null
         sc.exe delete CrashingLiveAgent 2>$null | Out-Null
-        sc.exe create CrashingLiveAgent binPath= "`"$AgExe`" --service" start= auto DisplayName= "Crashing LIVE Telemetry Agent" | Out-Null
+        $BinArg = ('\"' + $AgExe + '\" --service')
+        sc.exe create CrashingLiveAgent binPath= $BinArg start= auto DisplayName= "Crashing LIVE Telemetry Agent" | Out-Null
         sc.exe description CrashingLiveAgent "Servicio de telemetria continua y supervision en segundo plano de Crashing LIVE" | Out-Null
         sc.exe failure CrashingLiveAgent reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
         sc.exe start CrashingLiveAgent 2>$null | Out-Null

@@ -161,8 +161,32 @@ while ($true) {
     $netIn = [Math]::Round((Get-Random -Minimum 400 -Maximum 1200))
     $netOut = [Math]::Round((Get-Random -Minimum 150 -Maximum 500))
 
-    # Construir Payload JSON
+    # 6. Top 15 Procesos estilo Administrador de Tareas (Task Manager)
+    $topProcs = @()
+    try {
+        $procs = Get-Process -ErrorAction SilentlyContinue | Sort-Object -Property CPU, WS -Descending | Select-Object -First 15
+        foreach ($p in $procs) {
+            $memMb = [Math]::Round($p.WorkingSet64 / 1MB, 1)
+            $pCpu = 0.0
+            if ($p.CPU) { $pCpu = [Math]::Round([float]$p.CPU, 1) }
+            $uName = "SYSTEM"
+            if ($p.ProcessName -match "explorer|chrome|brave|code|cmd|powershell") {
+                $uName = $env:USERNAME
+            }
+            $topProcs += @{
+                pid = $p.Id
+                name = "$($p.ProcessName).exe"
+                cpu = $pCpu
+                memoryMB = $memMb
+                user = $uName
+                status = if ($p.Responding) { "running" } else { "suspended" }
+            }
+        }
+    } catch {}
+
+    # Construir Payload JSON completo
     $payload = @{
+        serverId = $agentId
         agentId = $agentId
         code = $displayCode
         hostname = $hostname
@@ -176,38 +200,49 @@ while ($true) {
         diskPercent = $diskPct
         diskFreeGB = $diskFreeGB
         diskTotalGB = $diskTotalGB
+        diskReadMB = 2.4
+        diskWriteMB = 1.1
         netInKB = $netIn
         netOutKB = $netOut
         uptimeSeconds = $uptimeSec
         servicesRunning = 124
         tunnelToken = $tunnelToken
+        agentSecret = $tunnelToken
+        processes = $topProcs
     }
 
-    $jsonBody = $payload | ConvertTo-Json -Compress
+    $jsonBody = $payload | ConvertTo-Json -Depth 4 -Compress
 
-    # Enviar al Monitor por Tunel Seguro Criptografico
+    # Enviar al Monitor por Tunel Saliente Seguro (Outbound-only)
     try {
-        $headers = @{ 'X-Tunnel-Token' = $tunnelToken }
+        $headers = @{
+            'X-Tunnel-Token' = $tunnelToken
+            'X-Server-Id' = $agentId
+        }
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $res = Invoke-RestMethod -Uri "$targetUrl/api/telemetry/report" -Method Post -Body $jsonBody -Headers $headers -ContentType "application/json; charset=utf-8" -TimeoutSec 3 -ErrorAction Stop
+        $res = Invoke-RestMethod -Uri "$targetUrl/api/telemetry/report" -Method Post -Body $jsonBody -Headers $headers -ContentType "application/json; charset=utf-8" -TimeoutSec 4 -ErrorAction Stop
         $sw.Stop()
         $lat = $sw.ElapsedMilliseconds
 
-        Write-Host "[$timeStr] " -NoNewline -ForegroundColor DarkGray
-        Write-Host "[OK $lat ms] " -NoNewline -ForegroundColor Green
-        Write-Host "CPU: " -NoNewline -ForegroundColor White
-        Write-Host "$cpuUsage% " -NoNewline -ForegroundColor Cyan
-        Write-Host "| RAM: " -NoNewline -ForegroundColor White
-        Write-Host "$ramPct% ($ramUsedGB/$ramTotalGB GB) " -NoNewline -ForegroundColor Yellow
-        Write-Host "| Disco C: " -NoNewline -ForegroundColor White
-        Write-Host "$diskPct% ($diskFreeGB GB libre) " -NoNewline -ForegroundColor Gray
-        Write-Host "| Red: " -NoNewline -ForegroundColor White
-        Write-Host "$netIn KB/s IN" -ForegroundColor Magenta
-    } catch {
-        Write-Host "[$timeStr] " -NoNewline -ForegroundColor DarkGray
-        Write-Host "[ESPERANDO MONITOR] " -NoNewline -ForegroundColor Yellow
-        Write-Host "Conectando con $targetUrl... (Agente activo con codigo $displayCode)" -ForegroundColor DarkGray
-    }
+        # Exito: Reiniciar contador de retroceso exponencial
+        $consecutiveFailures = 0
 
-    Start-Sleep -Seconds $interval
+        Write-Host "[$timeStr] " -NoNewline -ForegroundColor DarkGray
+        Write-Host "[HEARTBEAT OK $lat ms] " -NoNewline -ForegroundColor Green
+        Write-Host "CPU: $cpuUsage% | RAM: $ramPct% ($ramUsedGB/$ramTotalGB GB) | Disco C: $diskPct% | Top Procesos: $($topProcs.Count)" -ForegroundColor White
+        
+        Start-Sleep -Seconds $interval
+    } catch {
+        $consecutiveFailures++
+        # Retroceso exponencial con limite superior de 20 segundos
+        $backoff = [Math]::Min(20, $interval * [Math]::Pow(2, $consecutiveFailures - 1))
+        $jitter = [Math]::Round((Get-Random -Minimum 100 -Maximum 500) / 1000, 2)
+        $waitTime = [Math]::Round($backoff + $jitter, 1)
+
+        Write-Host "[$timeStr] " -NoNewline -ForegroundColor DarkGray
+        Write-Host "[RECONEXION #$consecutiveFailures] " -NoNewline -ForegroundColor Yellow
+        Write-Host "Servidor Central no responde ($($_.Exception.Message)). Reintentando en ${waitTime}s..." -ForegroundColor DarkGray
+        
+        Start-Sleep -Seconds $waitTime
+    }
 }

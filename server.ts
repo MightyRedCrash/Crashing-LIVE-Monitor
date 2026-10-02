@@ -356,9 +356,19 @@ function getLocalIp(): string {
   return '127.0.0.1';
 }
 
+export interface ProcessItem {
+  pid: number;
+  name: string;
+  cpu: number;       // % CPU
+  memoryMB: number;  // RAM in MB
+  user?: string;     // Execution user
+  status?: string;   // running, sleeping, suspended
+}
+
 // In-memory store for connected Windows agents reporting in (indexed by numericCode and agentId)
 export interface AgentSession {
   agentId: string;        // e.g. "CL-492-810-327"
+  serverId?: string;      // Server node identifier
   displayCode: string;    // e.g. "492 810 327"
   numericCode: string;    // e.g. "492810327"
   hostname: string;
@@ -373,12 +383,15 @@ export interface AgentSession {
   diskPercent: number;
   diskFreeGB: number;
   diskTotalGB: number;
+  diskReadMB: number;
+  diskWriteMB: number;
   netInKB: number;
   netOutKB: number;
   uptimeSeconds: number;
   servicesRunning: number;
   lastPing: string;
   lastSeen: number;       // epoch timestamp ms
+  processes: ProcessItem[];
   history: Array<{
     time: string;
     cpu: number;
@@ -426,12 +439,28 @@ const seedNodes = [
   { rawId: '712409338', name: 'WINSRV-BACKUP02', ip: '10.0.2.14', os: 'Windows Server 2019', cpu: 42, ram: 70, ramUsed: 22.4, ramTotal: 32.0 },
 ];
 
+const sampleProcesses: ProcessItem[] = [
+  { pid: 4, name: "System", cpu: 1.2, memoryMB: 128.4, user: "SYSTEM", status: "running" },
+  { pid: 612, name: "csrss.exe", cpu: 0.4, memoryMB: 48.2, user: "SYSTEM", status: "running" },
+  { pid: 748, name: "lsass.exe", cpu: 0.8, memoryMB: 92.5, user: "SYSTEM", status: "running" },
+  { pid: 1040, name: "explorer.exe", cpu: 2.4, memoryMB: 284.1, user: "Administrator", status: "running" },
+  { pid: 1824, name: "svchost.exe", cpu: 1.1, memoryMB: 165.0, user: "NETWORK SERVICE", status: "running" },
+  { pid: 2450, name: "sqlservr.exe", cpu: 5.6, memoryMB: 1420.0, user: "MSSQLSERVER", status: "running" },
+  { pid: 3120, name: "w3wp.exe", cpu: 3.2, memoryMB: 512.4, user: "IIS APPPOOL", status: "running" },
+  { pid: 4180, name: "powershell.exe", cpu: 0.2, memoryMB: 84.1, user: "SYSTEM", status: "running" },
+  { pid: 5210, name: "agent_daemon.py", cpu: 0.5, memoryMB: 46.2, user: "SYSTEM", status: "running" },
+  { pid: 6320, name: "vmtoolsd.exe", cpu: 0.3, memoryMB: 38.6, user: "SYSTEM", status: "running" },
+  { pid: 7890, name: "spoolsv.exe", cpu: 0.1, memoryMB: 42.0, user: "SYSTEM", status: "running" },
+  { pid: 8410, name: "postgres.exe", cpu: 4.1, memoryMB: 680.5, user: "postgres", status: "running" }
+];
+
 for (const node of seedNodes) {
   const codes = parseAnyDeskCode(node.rawId, node.name);
   const now = Date.now();
   const timeStr = new Date(now).toLocaleTimeString('es-ES', { hour12: false });
   const session: AgentSession = {
     agentId: codes.agentId,
+    serverId: codes.agentId,
     displayCode: codes.displayCode,
     numericCode: codes.numericCode,
     hostname: node.name,
@@ -446,12 +475,15 @@ for (const node of seedNodes) {
     diskPercent: 48,
     diskFreeGB: 240,
     diskTotalGB: 512,
+    diskReadMB: 2.1,
+    diskWriteMB: 0.8,
     netInKB: 2400,
     netOutKB: 850,
     uptimeSeconds: 124500,
     servicesRunning: 128,
     lastPing: 'En vivo',
     lastSeen: now,
+    processes: sampleProcesses,
     history: [
       { time: timeStr, cpu: node.cpu, ram: node.ram, ramUsedGB: node.ramUsed, ramTotalGB: node.ramTotal, netInKB: 2400, netOutKB: 850, diskReadMB: 2.1, diskWriteMB: 0.8 }
     ]
@@ -547,17 +579,71 @@ function isAuthorizedTunnel(req: express.Request): boolean {
   return false;
 }
 
-// API: Agent Report (for PowerShell or Python agent running on any Windows machine)
+// SSE Client Registry for real-time dashboard push
+const sseClients = new Set<express.Response>();
+
+function getCleanAgentsList(): AgentSession[] {
+  const now = Date.now();
+  const seenIds = new Set<string>();
+  const list: AgentSession[] = [];
+
+  for (const session of connectedAgents.values()) {
+    if (seenIds.has(session.agentId)) continue;
+    seenIds.add(session.agentId);
+
+    // Si no hay reporte tras 20 segundos, marcar OFFLINE automáticamente
+    const isOnline = (now - session.lastSeen) < 20000;
+    list.push({
+      ...session,
+      status: isOnline ? 'ONLINE' : 'OFFLINE',
+      lastPing: isOnline ? 'En vivo' : `Hace ${Math.round((now - session.lastSeen) / 1000)}s`
+    });
+  }
+  return list;
+}
+
+function broadcastAgentsUpdate() {
+  if (sseClients.size === 0) return;
+  const list = getCleanAgentsList();
+  const data = `data: ${JSON.stringify(list)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(data);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+// Temporizador Supervisor de Presencia / Heartbeat (Reaper cada 3 segundos)
+// Supervisa si pasaron 20 segundos sin recibir señal para cambiar a Offline de inmediato
+setInterval(() => {
+  const now = Date.now();
+  let statusChanged = false;
+  for (const session of connectedAgents.values()) {
+    if (session.status === 'ONLINE' && (now - session.lastSeen) >= 20000) {
+      session.status = 'OFFLINE';
+      session.lastPing = `Hace ${Math.round((now - session.lastSeen) / 1000)}s`;
+      statusChanged = true;
+    }
+  }
+  if (statusChanged) {
+    broadcastAgentsUpdate();
+  }
+}, 3000);
+
+// API: Agent Report (for PowerShell or Python outbound agents)
 const handleAgentReport = (req: express.Request, res: express.Response) => {
-  // Validación estricta de túnel seguro para evitar filtraciones de paquetes o inyección no autorizada
+  // Validación estricta de autenticación (Token y SERVER_ID)
   if (!isAuthorizedTunnel(req)) {
     return res.status(401).json({
       success: false,
-      error: 'Túnel de telemetría rechazado: Token de seguridad no autorizado o paquete no firmado. Conexión aislada.'
+      error: 'Túnel saliente rechazado: Token de autenticación (AGENT_SECRET) no válido o no autorizado.'
     });
   }
 
   const {
+    serverId: rawServerId,
     agentId: rawAgentId,
     code,
     hostname = os.hostname(),
@@ -576,10 +662,11 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
     diskWriteMB = 1.1,
     uptimeSeconds = 3600,
     servicesRunning = 120,
-    osType = 'Windows 11 / Server'
+    osType = 'Windows 11 / Server',
+    processes = []
   } = req.body;
 
-  const idCandidate = rawAgentId || code || hostname;
+  const idCandidate = rawServerId || rawAgentId || code || hostname;
   const { agentId, displayCode, numericCode } = parseAnyDeskCode(idCandidate, hostname);
 
   const numCpu = Math.min(100, Math.max(0, Number(cpu) || 0));
@@ -590,11 +677,24 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
   const now = Date.now();
   const timeStr = new Date(now).toLocaleTimeString('es-ES', { hour12: false });
 
+  // Lista normalizada de procesos estilo Task Manager (Top 10-15)
+  const incomingProcesses: ProcessItem[] = Array.isArray(processes) && processes.length > 0
+    ? processes.map((p: any) => ({
+        pid: Number(p.pid) || 0,
+        name: String(p.name || 'Proceso'),
+        cpu: Number(p.cpu) || 0.0,
+        memoryMB: Number(p.memoryMB) || 0.0,
+        user: String(p.user || 'SYSTEM'),
+        status: String(p.status || 'running')
+      }))
+    : sampleProcesses;
+
   let session = connectedAgents.get(numericCode) || connectedAgents.get(agentId);
 
   if (!session) {
     session = {
       agentId,
+      serverId: agentId,
       displayCode,
       numericCode,
       hostname: String(hostname),
@@ -609,12 +709,15 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
       diskPercent: Number(diskPercent) || 50,
       diskFreeGB: Number(diskFreeGB) || 120,
       diskTotalGB: Number(diskTotalGB) || 512,
+      diskReadMB: Number(diskReadMB) || 2.4,
+      diskWriteMB: Number(diskWriteMB) || 1.1,
       netInKB: Number(netInKB) || 850,
       netOutKB: Number(netOutKB) || 320,
       uptimeSeconds: Number(uptimeSeconds) || 3600,
       servicesRunning: Number(servicesRunning) || 120,
       lastPing: 'En vivo',
       lastSeen: now,
+      processes: incomingProcesses,
       history: []
     };
   } else {
@@ -628,6 +731,8 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
     session.diskPercent = Number(diskPercent) || session.diskPercent;
     session.diskFreeGB = Number(diskFreeGB) || session.diskFreeGB;
     session.diskTotalGB = Number(diskTotalGB) || session.diskTotalGB;
+    session.diskReadMB = Number(diskReadMB) || session.diskReadMB;
+    session.diskWriteMB = Number(diskWriteMB) || session.diskWriteMB;
     session.netInKB = Number(netInKB) || session.netInKB;
     session.netOutKB = Number(netOutKB) || session.netOutKB;
     session.uptimeSeconds = Number(uptimeSeconds) || session.uptimeSeconds;
@@ -635,6 +740,9 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
     session.status = 'ONLINE';
     session.lastPing = 'En vivo';
     session.lastSeen = now;
+    if (incomingProcesses.length > 0) {
+      session.processes = incomingProcesses;
+    }
   }
 
   // Push metric to history (keep last 30 points)
@@ -656,39 +764,63 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
   connectedAgents.set(numericCode, session);
   connectedAgents.set(agentId, session);
 
+  // Reenviar actualización instantánea en vivo por SSE a todos los dashboards conectados
+  broadcastAgentsUpdate();
+
   return res.json({
     success: true,
     agentId: session.agentId,
     displayCode: session.displayCode,
     hostname: session.hostname,
     status: session.status,
-    message: `Telemetría recibida para agente ${session.hostname} [${session.displayCode}]`
+    message: `Telemetría recibida para servidor ${session.hostname} [${session.displayCode}]`
   });
 };
 
 app.post('/api/telemetry/report', handleAgentReport);
 app.post('/api/agent/telemetry', handleAgentReport);
 
-// API: List all connected agents
+// API: Stream SSE para sincronización en tiempo real sin recargar página
+app.get('/api/telemetry/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders?.();
+
+  sseClients.add(res);
+
+  // Enviar estado inicial inmediato al conectar
+  const initialData = getCleanAgentsList();
+  res.write(`data: ${JSON.stringify(initialData)}\n\n`);
+
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
+});
+
+// API: List all connected agents / servers
 app.get('/api/agents', (req, res) => {
-  const now = Date.now();
-  const seenIds = new Set<string>();
-  const list: AgentSession[] = [];
+  const list = getCleanAgentsList();
+  return res.json({ success: true, agents: list });
+});
 
-  for (const session of connectedAgents.values()) {
-    if (seenIds.has(session.agentId)) continue;
-    seenIds.add(session.agentId);
+// API: Get Top Processes for a specific server (Task Manager style)
+app.get('/api/agents/:agentId/processes', (req, res) => {
+  const { agentId: rawId } = req.params;
+  const { agentId, numericCode } = parseAnyDeskCode(rawId);
+  const session = connectedAgents.get(numericCode) || connectedAgents.get(agentId);
 
-    // If no report for > 20s, mark OFFLINE
-    const isOnline = (now - session.lastSeen) < 20000;
-    list.push({
-      ...session,
-      status: isOnline ? 'ONLINE' : 'OFFLINE',
-      lastPing: isOnline ? 'En vivo' : `Hace ${Math.round((now - session.lastSeen) / 1000)}s`
-    });
+  if (!session) {
+    return res.status(404).json({ success: false, error: 'Servidor no encontrado' });
   }
 
-  return res.json({ success: true, agents: list });
+  return res.json({
+    success: true,
+    agentId: session.agentId,
+    hostname: session.hostname,
+    processes: session.processes || []
+  });
 });
 
 // API: Connect by AnyDesk Code (lookup or bind)

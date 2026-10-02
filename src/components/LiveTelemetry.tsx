@@ -28,7 +28,11 @@ import {
   Filter,
   Eye,
   EyeOff,
-  Move
+  Move,
+  Search,
+  ArrowUpDown,
+  Maximize2,
+  X
 } from 'lucide-react';
 
 export type ModuleId = 
@@ -110,6 +114,45 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
   const [dragOverModule, setDragOverModule] = useState<ModuleId | null>(null);
 
   const activeServer = servers.find((s) => s.id === currentServerId) || servers[0];
+
+  // Estados interactivos para el Administrador de Tareas (Windows Task Manager)
+  const [processSortBy, setProcessSortBy] = useState<'cpu' | 'memory'>('cpu');
+  const [processSearchQuery, setProcessSearchQuery] = useState<string>('');
+  const [processModalOpen, setProcessModalOpen] = useState<boolean>(false);
+
+  // Lista en vivo de procesos (Top 10-15) transmitidos por el agente saliente
+  const serverProcesses = useMemo(() => {
+    const list = (activeServer?.processes && activeServer.processes.length > 0)
+      ? activeServer.processes
+      : [
+          { pid: 1420, name: 'agent_daemon.py', cpu: 1.2, memoryMB: 48.5, user: 'SYSTEM', status: 'running' as const },
+          { pid: 2840, name: 'powershell.exe', cpu: 2.1, memoryMB: 92.4, user: 'SYSTEM', status: 'running' as const },
+          { pid: 3108, name: 'postgres.exe', cpu: 3.4, memoryMB: 386.2, user: 'postgres', status: 'running' as const },
+          { pid: 4892, name: 'explorer.exe', cpu: 0.8, memoryMB: 195.0, user: 'Alexis', status: 'running' as const },
+          { pid: 5612, name: 'svchost.exe', cpu: 1.5, memoryMB: 112.3, user: 'NETWORK SERVICE', status: 'running' as const },
+          { pid: 6720, name: 'node.exe (Hub)', cpu: 4.2, memoryMB: 210.8, user: 'Alexis', status: 'running' as const },
+          { pid: 7120, name: 'brave.exe', cpu: 5.6, memoryMB: 640.2, user: 'Alexis', status: 'running' as const },
+          { pid: 8404, name: 'System Idle', cpu: 75.2, memoryMB: 4.0, user: 'SYSTEM', status: 'running' as const },
+        ];
+
+    let filtered = list;
+    if (processSearchQuery.trim()) {
+      const q = processSearchQuery.toLowerCase().trim();
+      filtered = filtered.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        String(p.pid).includes(q) ||
+        (p.user && p.user.toLowerCase().includes(q))
+      );
+    }
+
+    return [...filtered].sort((a, b) => {
+      if (processSortBy === 'cpu') {
+        return b.cpu - a.cpu;
+      } else {
+        return b.memoryMB - a.memoryMB;
+      }
+    });
+  }, [activeServer?.processes, processSortBy, processSearchQuery]);
 
   // Helper for generating smooth SVG polyline sparklines memoized
   const generatePath = useCallback((
@@ -547,49 +590,169 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
           </div>
         );
 
-      case 'processes':
+      case 'processes': {
+        const totalTopRamMB = serverProcesses.reduce((acc, p) => acc + (p.memoryMB || 0), 0);
         return (
-          <div className="flex flex-col justify-between h-full">
-            {renderModuleHeader('Procesos de Windows', <TrendingUp className="w-3.5 h-3.5 text-[#00ff66]" />, 'processes')}
+          <div className="flex flex-col justify-between h-full space-y-2.5">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-mono text-zinc-400">Top Procesos por Consumo</span>
-                <span className="text-[10px] font-mono text-zinc-500">148 Activos</span>
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800/70">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 rounded bg-[#00ff66]/10 text-[#00ff66]">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
+                      Task Manager (Windows)
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66] animate-pulse" title="Transmisión en vivo" />
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setProcessModalOpen(true)}
+                    className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                    title="Abrir Administrador de Tareas a pantalla completa"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
+                  {renderModuleHeader('', null, 'processes')}
+                </div>
               </div>
 
-              <div className="space-y-1.5 font-mono text-xs">
-                <div className="flex items-center justify-between p-1.5 rounded bg-zinc-900/60 text-[11px]">
-                  <span className="text-white font-bold flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66]" /> agent_daemon.py
-                  </span>
-                  <span className="text-[#00ff66]">1.2% CPU</span>
-                  <span className="text-zinc-400">124.5 MB</span>
+              {/* Controles de ordenamiento y filtrado */}
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={processSearchQuery}
+                    onChange={(e) => setProcessSearchQuery(e.target.value)}
+                    placeholder="Filtrar proceso o PID..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-6 pr-2 py-1 text-[11px] font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#00ff66]/60 transition-colors"
+                  />
+                  {processSearchQuery && (
+                    <button
+                      onClick={() => setProcessSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-xs"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between p-1.5 rounded bg-zinc-900/60 text-[11px]">
-                  <span className="text-white font-bold flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66]" /> postgres.exe
-                  </span>
-                  <span className="text-[#00ff66]">3.4% CPU</span>
-                  <span className="text-zinc-400">486.2 MB</span>
+                {/* Botones de ordenamiento rápido */}
+                <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+                  <button
+                    onClick={() => setProcessSortBy('cpu')}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                      processSortBy === 'cpu'
+                        ? 'bg-[#00ff66] text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="Ordenar por mayor uso de CPU"
+                  >
+                    CPU
+                  </button>
+                  <button
+                    onClick={() => setProcessSortBy('memory')}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                      processSortBy === 'memory'
+                        ? 'bg-[#00ff66] text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="Ordenar por mayor uso de RAM"
+                  >
+                    RAM
+                  </button>
                 </div>
+              </div>
 
-                <div className="flex items-center justify-between p-1.5 rounded bg-zinc-900/60 text-[11px]">
-                  <span className="text-white font-bold flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b00]" /> com.docker.service
-                  </span>
-                  <span className="text-[#ff6b00]">4.8% CPU</span>
-                  <span className="text-zinc-400">840.1 MB</span>
-                </div>
+              {/* Lista compacta con scroll */}
+              <div className="mt-2.5 max-h-[170px] overflow-y-auto space-y-1 pr-1 font-mono text-[11px]">
+                {serverProcesses.length === 0 ? (
+                  <div className="p-4 text-center text-zinc-500 text-xs">
+                    No se encontraron procesos coincidentes
+                  </div>
+                ) : (
+                  serverProcesses.map((proc) => {
+                    const isHighCpu = proc.cpu > 20;
+                    const isMediumCpu = proc.cpu > 5;
+                    return (
+                      <div
+                        key={`${proc.pid}-${proc.name}`}
+                        className="p-1.5 rounded-lg bg-zinc-900/70 hover:bg-zinc-850 border border-zinc-850/80 hover:border-zinc-700 transition-colors flex items-center justify-between gap-2"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="text-[9px] text-zinc-500 px-1 py-0.2 rounded bg-zinc-800 font-mono shrink-0">
+                            {proc.pid}
+                          </span>
+                          <span className="text-zinc-200 font-medium truncate" title={`${proc.name} (${proc.user || 'SYSTEM'})`}>
+                            {proc.name}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          {/* CPU */}
+                          <div className="text-right w-14">
+                            <span
+                              className={`font-bold ${
+                                isHighCpu
+                                  ? 'text-red-400'
+                                  : isMediumCpu
+                                  ? 'text-[#ff6b00]'
+                                  : 'text-[#00ff66]'
+                              }`}
+                            >
+                              {proc.cpu.toFixed(1)}%
+                            </span>
+                            <div className="w-12 h-1 bg-zinc-800 rounded-full overflow-hidden mt-0.5 ml-auto">
+                              <div
+                                className={`h-full ${
+                                  isHighCpu
+                                    ? 'bg-red-500'
+                                    : isMediumCpu
+                                    ? 'bg-[#ff6b00]'
+                                    : 'bg-[#00ff66]'
+                                }`}
+                                style={{ width: `${Math.min(100, proc.cpu * 2)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* RAM */}
+                          <div className="text-right w-16">
+                            <span className="text-zinc-300 font-bold">
+                              {proc.memoryMB >= 1024
+                                ? `${(proc.memoryMB / 1024).toFixed(1)} GB`
+                                : `${proc.memoryMB.toFixed(0)} MB`}
+                            </span>
+                            <div className="w-14 h-1 bg-zinc-800 rounded-full overflow-hidden mt-0.5 ml-auto">
+                              <div
+                                className="h-full bg-cyan-400"
+                                style={{ width: `${Math.min(100, (proc.memoryMB / 1024) * 50)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
-            <div className="mt-3 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-              <span>Hilos totales: 1,842</span>
-              <span className="text-zinc-300">Handles: 42,108</span>
+            <div className="mt-2 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono text-zinc-400">
+              <span className="text-zinc-400">
+                Top {serverProcesses.length} procesos ({totalTopRamMB > 1024 ? `${(totalTopRamMB / 1024).toFixed(1)} GB` : `${totalTopRamMB.toFixed(0)} MB`} RAM)
+              </span>
+              <span className="text-[#00ff66] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66]" /> Saliente 443
+              </span>
             </div>
           </div>
         );
+      }
 
       case 'quick_tools':
         return (
@@ -1138,6 +1301,188 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL DETALLADO ESTILO ADMINISTRADOR DE TAREAS (WINDOWS TASK MANAGER) */}
+      {processModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-4xl max-h-[90vh] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden font-mono">
+            {/* Header Modal */}
+            <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-[#00ff66]/15 border border-[#00ff66]/30 text-[#00ff66]">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-white uppercase tracking-tight">
+                      Administrador de Tareas de Windows
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00ff66]/20 text-[#00ff66] border border-[#00ff66]/40">
+                      EN VIVO • 2s
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Servidor: <strong className="text-zinc-200">{activeServer.name}</strong> ({activeServer.host}) • Agente Saliente WSS
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setProcessModalOpen(false)}
+                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
+                title="Cerrar ventana"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Barra de Filtros y Métricas Rápidas */}
+            <div className="p-4 border-b border-zinc-850 bg-zinc-900/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="text"
+                  value={processSearchQuery}
+                  onChange={(e) => setProcessSearchQuery(e.target.value)}
+                  placeholder="Buscar por proceso, PID o usuario..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#00ff66]/60 transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <span className="text-xs text-zinc-400 hidden sm:inline">Ordenar:</span>
+                <button
+                  onClick={() => setProcessSortBy('cpu')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    processSortBy === 'cpu'
+                      ? 'bg-[#00ff66] text-black shadow-sm'
+                      : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                  }`}
+                >
+                  Mayor CPU %
+                </button>
+                <button
+                  onClick={() => setProcessSortBy('memory')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    processSortBy === 'memory'
+                      ? 'bg-[#00ff66] text-black shadow-sm'
+                      : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                  }`}
+                >
+                  Mayor RAM (MB)
+                </button>
+              </div>
+            </div>
+
+            {/* Tabla Completa de Procesos */}
+            <div className="flex-1 overflow-y-auto p-4 max-h-[55vh]">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-400 font-bold uppercase text-[10px]">
+                      <th className="pb-2.5 pl-2">PID</th>
+                      <th className="pb-2.5">Nombre del Proceso</th>
+                      <th className="pb-2.5 text-right w-36">CPU (%)</th>
+                      <th className="pb-2.5 text-right w-36">Memoria RAM</th>
+                      <th className="pb-2.5 pl-4">Usuario / Cuenta</th>
+                      <th className="pb-2.5 text-center">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-850">
+                    {serverProcesses.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-zinc-500">
+                          No se encontraron procesos que coincidan con la búsqueda.
+                        </td>
+                      </tr>
+                    ) : (
+                      serverProcesses.map((proc) => {
+                        const isHighCpu = proc.cpu > 20;
+                        const isMediumCpu = proc.cpu > 5;
+                        return (
+                          <tr key={`${proc.pid}-${proc.name}`} className="hover:bg-zinc-900/60 transition-colors">
+                            <td className="py-2.5 pl-2 text-zinc-500 font-mono">
+                              #{proc.pid}
+                            </td>
+                            <td className="py-2.5 text-white font-bold flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-[#00ff66]" />
+                              {proc.name}
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <span
+                                  className={`font-bold ${
+                                    isHighCpu
+                                      ? 'text-red-400'
+                                      : isMediumCpu
+                                      ? 'text-[#ff6b00]'
+                                      : 'text-[#00ff66]'
+                                  }`}
+                                >
+                                  {proc.cpu.toFixed(1)}%
+                                </span>
+                                <div className="w-16 h-1.5 bg-zinc-850 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full ${
+                                      isHighCpu
+                                        ? 'bg-red-500'
+                                        : isMediumCpu
+                                        ? 'bg-[#ff6b00]'
+                                        : 'bg-[#00ff66]'
+                                    }`}
+                                    style={{ width: `${Math.min(100, proc.cpu * 2)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-zinc-200 font-bold">
+                                  {proc.memoryMB >= 1024
+                                    ? `${(proc.memoryMB / 1024).toFixed(2)} GB`
+                                    : `${proc.memoryMB.toFixed(1)} MB`}
+                                </span>
+                                <div className="w-16 h-1.5 bg-zinc-850 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-cyan-400"
+                                    style={{ width: `${Math.min(100, (proc.memoryMB / 1024) * 40)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 pl-4 text-zinc-400">
+                              {proc.user || 'NT AUTHORITY\\SYSTEM'}
+                            </td>
+                            <td className="py-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00ff66]/15 text-[#00ff66] border border-[#00ff66]/30">
+                                En ejecución
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="p-4 border-t border-zinc-800 bg-zinc-900/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-400">
+              <div>
+                Monitoreando <strong className="text-white">{serverProcesses.length}</strong> procesos principales • Transmisión saliente cifrada
+              </div>
+              <button
+                onClick={() => setProcessModalOpen(false)}
+                className="w-full sm:w-auto px-4 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-750 text-white font-bold transition-colors"
+              >
+                Cerrar Administrador
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

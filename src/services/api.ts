@@ -1,4 +1,4 @@
-import { DisruptiveApproval, MonthlyReportData } from '../types';
+import { DisruptiveApproval, MonthlyReportData, ProcessItem } from '../types';
 
 export interface DiagnoseResponse {
   success: boolean;
@@ -237,9 +237,13 @@ export interface AgentSessionData {
   netInKB: number;
   netOutKB: number;
   uptimeSeconds: number;
+  serverId?: string;
+  diskReadMB?: number;
+  diskWriteMB?: number;
   servicesRunning: number;
   lastPing: string;
   lastSeen: number;
+  processes?: ProcessItem[];
   history?: Array<{
     time: string;
     cpu: number;
@@ -263,6 +267,68 @@ export async function fetchConnectedAgents(): Promise<AgentSessionData[]> {
     console.warn('Error fetching connected agents list:', err);
     return [];
   }
+}
+
+export async function fetchAgentProcesses(agentId: string): Promise<ProcessItem[]> {
+  try {
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/processes`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.processes || [];
+  } catch {
+    return [];
+  }
+}
+
+export function subscribeToTelemetryStream(
+  onData: (agents: AgentSessionData[]) => void
+): () => void {
+  let eventSource: EventSource | null = null;
+  let pollInterval: any = null;
+
+  try {
+    eventSource = new EventSource('/api/telemetry/stream');
+    eventSource.onmessage = (event) => {
+      try {
+        const list = JSON.parse(event.data);
+        if (Array.isArray(list)) {
+          onData(list);
+        }
+      } catch (err) {
+        console.warn('Error parsing SSE telemetry:', err);
+      }
+    };
+    eventSource.onerror = () => {
+      // Fallback a sondeo rápido si SSE falla
+      if (!pollInterval) {
+        pollInterval = setInterval(async () => {
+          const agents = await fetchConnectedAgents();
+          if (agents && agents.length > 0) {
+            onData(agents);
+          }
+        }, 2500);
+      }
+    };
+  } catch {
+    pollInterval = setInterval(async () => {
+      const agents = await fetchConnectedAgents();
+      if (agents && agents.length > 0) {
+        onData(agents);
+      }
+    }, 2500);
+  }
+
+  // Función de desuscripción
+  return () => {
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  };
 }
 
 export async function connectAgentByCode(agentCode: string): Promise<{ success: boolean; agent?: AgentSessionData; error?: string; message?: string }> {

@@ -151,6 +151,15 @@ export interface WizardConfig {
   webhookUrl: string;
 }
 
+export interface ProcessItem {
+  pid: number;
+  name: string;
+  cpu: number;       // % CPU (e.g. 12.4)
+  memoryMB: number;  // RAM in MB (e.g. 450.8)
+  user?: string;     // User account (e.g. SYSTEM, Alexis)
+  status?: string;   // Running, Sleeping, etc.
+}
+
 export interface ConnectedServer {
   id: string;
   name: string;
@@ -174,6 +183,12 @@ export interface ConnectedServer {
   netOutKB?: number;
   diskReadMB?: number;
   diskWriteMB?: number;
+  diskPercent?: number;
+  diskFreeGB?: number;
+  diskTotalGB?: number;
+  uptimeSeconds?: number;
+  servicesRunning?: number;
+  processes?: ProcessItem[];
   metricsHistory?: SystemMetricPoint[];
 }
 

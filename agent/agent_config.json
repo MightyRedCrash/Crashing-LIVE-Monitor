@@ -1,8 +1,8 @@
-{
-  "agent_id": "CL-492-810-327",
-  "display_code": "492 810 327",
-  "numeric_code": "492810327",
-  "monitor_url": "http://localhost:3000",
-  "interval_seconds": 2,
-  "tunnel_token": "clk_live_tunnel_sec_2026"
+﻿{
+    "monitor_url":  "http://localhost:3000",
+    "numeric_code":  "492810327",
+    "display_code":  "492 810 327",
+    "tunnel_token":  "clk_live_tunnel_sec_2026",
+    "interval_seconds":  2,
+    "agent_id":  "CL-492-810-327"
 }

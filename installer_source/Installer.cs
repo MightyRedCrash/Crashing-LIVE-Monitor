@@ -4,6 +4,8 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace CrashingLiveInstaller
 {
@@ -42,6 +44,7 @@ namespace CrashingLiveInstaller
                         silent = true;
                     }
                     else if (arg.Equals("/UNINSTALL", StringComparison.OrdinalIgnoreCase) || 
+                             arg.Equals("/CLEAN", StringComparison.OrdinalIgnoreCase) ||
                              arg.Equals("/U", StringComparison.OrdinalIgnoreCase) ||
                              arg.Equals("-u", StringComparison.OrdinalIgnoreCase))
                     {
@@ -70,7 +73,8 @@ namespace CrashingLiveInstaller
                     if (!silent)
                     {
                         MessageBox.Show(
-                            "Crashing LIVE ha sido completamente desinstalado de su equipo.\nSe han eliminado los archivos y accesos directos.",
+                            "Crashing LIVE ha sido completamente desinstalado de su equipo.\n" +
+                            "Se han detenido los servicios, eliminado los binarios, logs y claves de registro.",
                             "Desinstalación Completa",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Information
@@ -90,7 +94,7 @@ namespace CrashingLiveInstaller
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    "Ocurrió un problema al iniciar el instalador:\n\n" + ex.Message + "\n\n" + ex.StackTrace,
+                    "Ocurrió un problema al ejecutar el instalador:\n\n" + ex.Message + "\n\n" + ex.StackTrace,
                     "Error Crashing LIVE",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error
@@ -104,25 +108,43 @@ namespace CrashingLiveInstaller
             return Path.Combine(appData, "Crashing LIVE");
         }
 
+        public static bool IsPreviousInstallationPresent(string targetDir)
+        {
+            if (string.IsNullOrEmpty(targetDir)) targetDir = GetDefaultInstallDir();
+            if (!Directory.Exists(targetDir)) return false;
+
+            return File.Exists(Path.Combine(targetDir, "agent_daemon.ps1")) ||
+                   File.Exists(Path.Combine(targetDir, "agent_config.json")) ||
+                   File.Exists(Path.Combine(targetDir, "iniciar_monitor.bat"));
+        }
+
         public static void DoUninstall(string targetDir)
         {
             if (string.IsNullOrEmpty(targetDir)) targetDir = GetDefaultInstallDir();
 
-            // 1. Detener procesos activos
+            // 1. Detener procesos activos y servicios
             try
             {
                 ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
-                    "-NoProfile -ExecutionPolicy Bypass -Command \"Get-Process | Where-Object { $_.MainWindowTitle -like '*Crashing LIVE*' } | Stop-Process -Force -ErrorAction SilentlyContinue; Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like '*agent_daemon.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"");
+                    "-NoProfile -ExecutionPolicy Bypass -Command \"" +
+                    "taskkill /f /fi 'WINDOWTITLE eq Crashing LIVE*' 2>$null; " +
+                    "Get-Process | Where-Object { $_.MainWindowTitle -like '*Crashing LIVE*' } | Stop-Process -Force -ErrorAction SilentlyContinue; " +
+                    "Get-WmiObject Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent_daemon.ps1*' -or $_.CommandLine -like '*agent_daemon.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; " +
+                    "schtasks.exe /end /tn 'CrashingLiveAgent' 2>$null; " +
+                    "schtasks.exe /delete /tn 'CrashingLiveAgent' /f 2>$null; " +
+                    "sc.exe stop CrashingLiveAgent 2>$null; " +
+                    "sc.exe delete CrashingLiveAgent 2>$null; " +
+                    "\"");
                 psi.WindowStyle = ProcessWindowStyle.Hidden;
                 psi.CreateNoWindow = true;
                 using (Process p = Process.Start(psi))
                 {
-                    if (p != null) p.WaitForExit(3500);
+                    if (p != null) p.WaitForExit(4000);
                 }
             }
             catch {}
 
-            // 2. Eliminar accesos directos del escritorio
+            // 2. Eliminar accesos directos del escritorio y Menú Inicio
             try
             {
                 string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -137,15 +159,45 @@ namespace CrashingLiveInstaller
                         try { File.Delete(sc); } catch {}
                     }
                 }
+
+                string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Crashing LIVE");
+                if (Directory.Exists(startMenu))
+                {
+                    try { Directory.Delete(startMenu, true); } catch {}
+                }
             }
             catch {}
 
-            // 3. Eliminar archivos y directorio de instalación
+            // 3. Limpiar claves de registro asociadas
+            try
+            {
+                using (RegistryKey cu = Registry.CurrentUser.OpenSubKey("Software", true))
+                {
+                    if (cu != null)
+                    {
+                        cu.DeleteSubKeyTree("Crashing LIVE", false);
+                    }
+                }
+            }
+            catch {}
+
+            // 4. Eliminar archivos y directorio de instalación (con reintentos)
             try
             {
                 if (Directory.Exists(targetDir))
                 {
-                    Directory.Delete(targetDir, true);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        try
+                        {
+                            Directory.Delete(targetDir, true);
+                            break;
+                        }
+                        catch
+                        {
+                            System.Threading.Thread.Sleep(500);
+                        }
+                    }
                 }
             }
             catch {}
@@ -169,7 +221,24 @@ namespace CrashingLiveInstaller
             string logsDir = Path.Combine(targetDir, "logs");
             Directory.CreateDirectory(logsDir);
 
-            // Copiar icono de la aplicación a la carpeta de destino para los accesos directos
+            // Detener cualquier proceso previo si es modo actualizacion (upgrade)
+            try
+            {
+                ProcessStartInfo psiStop = new ProcessStartInfo("powershell.exe",
+                    "-NoProfile -ExecutionPolicy Bypass -Command \"" +
+                    "schtasks.exe /end /tn 'CrashingLiveAgent' 2>$null; " +
+                    "Get-WmiObject Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent_daemon.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; " +
+                    "\"");
+                psiStop.WindowStyle = ProcessWindowStyle.Hidden;
+                psiStop.CreateNoWindow = true;
+                using (Process p = Process.Start(psiStop))
+                {
+                    if (p != null) p.WaitForExit(3000);
+                }
+            }
+            catch {}
+
+            // Copiar icono de la aplicacion
             string iconDest = Path.Combine(targetDir, "app.ico");
             try
             {
@@ -182,7 +251,6 @@ namespace CrashingLiveInstaller
                 }
                 else
                 {
-                    // Extraer icono embebido
                     Icon appIcon = Icon.ExtractAssociatedIcon(currentExe);
                     if (appIcon != null)
                     {
@@ -195,13 +263,44 @@ namespace CrashingLiveInstaller
             }
             catch {}
 
-            // Códigos AnyDesk deterministas y limpios
-            Random rnd = new Random();
-            int p1 = rnd.Next(100, 999);
-            int p2 = rnd.Next(100, 999);
-            int p3 = rnd.Next(100, 999);
-            string displayCode = string.Format("{0} {1} {2}", p1, p2, p3);
-            string agentId = string.Format("CL-{0}-{1}-{2}", p1, p2, p3);
+            // Lógica de preservación de configuración existente (UPGRADE)
+            string configFile = Path.Combine(targetDir, "agent_config.json");
+            string agentId = "";
+            string displayCode = "";
+            string numericCode = "";
+            string tunnelToken = "clk_live_tunnel_sec_2026";
+
+            if (File.Exists(configFile))
+            {
+                try
+                {
+                    string existingJson = File.ReadAllText(configFile, Encoding.UTF8);
+                    Match mId = Regex.Match(existingJson, "\"agent_id\"\\s*:\\s*\"([^\"]+)\"");
+                    if (mId.Success) agentId = mId.Groups[1].Value;
+
+                    Match mDisp = Regex.Match(existingJson, "\"display_code\"\\s*:\\s*\"([^\"]+)\"");
+                    if (mDisp.Success) displayCode = mDisp.Groups[1].Value;
+
+                    Match mNum = Regex.Match(existingJson, "\"numeric_code\"\\s*:\\s*\"([^\"]+)\"");
+                    if (mNum.Success) numericCode = mNum.Groups[1].Value;
+
+                    Match mTok = Regex.Match(existingJson, "\"tunnel_token\"\\s*:\\s*\"([^\"]+)\"");
+                    if (mTok.Success) tunnelToken = mTok.Groups[1].Value;
+                }
+                catch {}
+            }
+
+            // Si no habia configuracion previa, generamos ID nuevo
+            if (string.IsNullOrEmpty(agentId) || string.IsNullOrEmpty(displayCode))
+            {
+                Random rnd = new Random();
+                int p1 = rnd.Next(100, 999);
+                int p2 = rnd.Next(100, 999);
+                int p3 = rnd.Next(100, 999);
+                displayCode = string.Format("{0} {1} {2}", p1, p2, p3);
+                numericCode = string.Format("{0}{1}{2}", p1, p2, p3);
+                agentId = string.Format("CL-{0}-{1}-{2}", p1, p2, p3);
+            }
 
             string agentBatPath = "";
             string monitorBatPath = "";
@@ -209,194 +308,38 @@ namespace CrashingLiveInstaller
             // 1. COMPONENTES DEL AGENTE
             if (mode == InstallMode.AgentOnly || mode == InstallMode.Both)
             {
-                string configFile = Path.Combine(targetDir, "agent_config.json");
-                if (!File.Exists(configFile))
+                string configContent = "{\n" +
+                    "  \"agent_id\": \"" + agentId + "\",\n" +
+                    "  \"display_code\": \"" + displayCode + "\",\n" +
+                    "  \"numeric_code\": \"" + numericCode + "\",\n" +
+                    "  \"monitor_url\": \"" + monitorUrl + "\",\n" +
+                    "  \"monitor_urls\": [\n    \"" + monitorUrl + "\"\n  ],\n" +
+                    "  \"interval_seconds\": 2,\n" +
+                    "  \"tunnel_token\": \"" + tunnelToken + "\"\n" +
+                    "}\n";
+                File.WriteAllText(configFile, configContent, Encoding.UTF8);
+
+                // Copiar o escribir agent_daemon.ps1
+                string ps1File = Path.Combine(targetDir, "agent_daemon.ps1");
+                string currentExeDir = Path.GetDirectoryName(Application.ExecutablePath);
+                string repoPs1 = Path.Combine(currentExeDir, "agent", "agent_daemon.ps1");
+                if (!File.Exists(repoPs1)) repoPs1 = Path.Combine(currentExeDir, "..", "agent", "agent_daemon.ps1");
+
+                if (File.Exists(repoPs1))
                 {
-                    string configContent = "{\n" +
-                        "  \"agent_id\": \"" + agentId + "\",\n" +
-                        "  \"display_code\": \"" + displayCode + "\",\n" +
-                        "  \"numeric_code\": \"" + p1.ToString() + p2.ToString() + p3.ToString() + "\",\n" +
-                        "  \"monitor_url\": \"" + monitorUrl + "\",\n" +
-                        "  \"interval_seconds\": 2,\n" +
-                        "  \"tunnel_token\": \"clk_live_tunnel_sec_2026\"\n" +
-                        "}\n";
-                    File.WriteAllText(configFile, configContent, Encoding.UTF8);
+                    File.Copy(repoPs1, ps1File, true);
+                }
+                else
+                {
+                    // Fallback directo empaquetado
+                    string ps1Code = "# -*- coding: utf-8 -*-\n" +
+                        "param ([string]$MonitorUrl = '" + monitorUrl + "', [int]$IntervalSeconds = 2)\n" +
+                        "$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition\n" +
+                        "& \"$ScriptDir\\agent_daemon.ps1\" -MonitorUrl $MonitorUrl -IntervalSeconds $IntervalSeconds\n";
+                    File.WriteAllText(ps1File, ps1Code, Encoding.UTF8);
                 }
 
-                string ps1File = Path.Combine(targetDir, "agent_daemon.ps1");
-                string ps1Content = @"# -*- coding: utf-8 -*-
-param (
-    [string]$MonitorUrl = '" + monitorUrl + @"',
-    [string]$CustomAgentCode = '',
-    [int]$IntervalSeconds = 2
-)
-$Host.UI.RawUI.WindowTitle = 'Crashing LIVE - Agente de Telemetria Windows'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$ConfigFile = Join-Path $ScriptDir 'agent_config.json'
-
-$AgentConfig = @{}
-if (Test-Path $ConfigFile) {
-    try {
-        $raw = Get-Content $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
-        $AgentConfig = @{
-            agent_id = $raw.agent_id
-            display_code = $raw.display_code
-            numeric_code = $raw.numeric_code
-            monitor_url = if ($raw.monitor_url) { $raw.monitor_url } else { $MonitorUrl }
-            interval_seconds = if ($raw.interval_seconds) { $raw.interval_seconds } else { $IntervalSeconds }
-            tunnel_token = if ($raw.tunnel_token) { $raw.tunnel_token } else { 'clk_live_tunnel_sec_2026' }
-        }
-    } catch {}
-}
-
-if (-not $AgentConfig.display_code) {
-    $r = [System.Random]::new()
-    $c1 = $r.Next(100, 999); $c2 = $r.Next(100, 999); $c3 = $r.Next(100, 999)
-    $AgentConfig = @{
-        agent_id = ""CL-$c1-$c2-$c3""
-        display_code = ""$c1 $c2 $c3""
-        numeric_code = ""$c1$c2$c3""
-        monitor_url = $MonitorUrl
-        interval_seconds = $IntervalSeconds
-        tunnel_token = 'clk_live_tunnel_sec_2026'
-    }
-    try { $AgentConfig | ConvertTo-Json | Set-Content $ConfigFile -Encoding UTF8 } catch {}
-}
-
-$displayCode = $AgentConfig.display_code
-$agentId = $AgentConfig.agent_id
-$targetUrl = $AgentConfig.monitor_url.TrimEnd('/')
-$token = $AgentConfig.tunnel_token
-$interval = [int]$AgentConfig.interval_seconds
-
-$hostname = $env:COMPUTERNAME
-$osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-$osCaption = if ($osInfo) { $osInfo.Caption } else { 'Microsoft Windows' }
-
-$localIp = '127.0.0.1'
-try {
-    $ipObj = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { 
-        $_.IPAddress -notmatch '^(169\.254|127\.)' -and $_.InterfaceAlias -notmatch 'Loopback' 
-    } | Select-Object -First 1
-    if ($ipObj) { $localIp = $ipObj.IPAddress }
-} catch {}
-
-Clear-Host
-Write-Host '================================================================================' -ForegroundColor Cyan
-Write-Host '                  CRASHING LIVE - AGENTE DE MONITOREO WINDOWS                   ' -ForegroundColor Green
-Write-Host '================================================================================' -ForegroundColor Cyan
-Write-Host '  SU CODIGO DE AGENTE (ESTILO ANYDESK):' -ForegroundColor Yellow
-Write-Host ''
-Write-Host ""             >>>   $displayCode   <<<"" -ForegroundColor Green
-Write-Host ""                   ID: $agentId"" -ForegroundColor Gray
-Write-Host ''
-Write-Host '  Introduzca este codigo en el Monitor Central para conectar y ver el estado.' -ForegroundColor White
-Write-Host '================================================================================' -ForegroundColor Cyan
-Write-Host ""  Monitor URL:    $targetUrl"" -ForegroundColor White
-Write-Host ""  Tunel Seguro:   ACTIVO (HMAC SHA-256 + Token)"" -ForegroundColor Green
-Write-Host ""  Equipo:         $hostname ($osCaption)"" -ForegroundColor White
-Write-Host ""  IP Local:       $localIp"" -ForegroundColor White
-Write-Host ""  Frecuencia:     Cada $interval segundos"" -ForegroundColor White
-Write-Host '================================================================================' -ForegroundColor Cyan
-Write-Host '  Presione Ctrl+C en cualquier momento para detener el agente.' -ForegroundColor DarkGray
-Write-Host ''
-
-while ($true) {
-    $timeStr = (Get-Date).ToString('HH:mm:ss')
-    
-    $cpuUsage = 15
-    try {
-        $c = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average
-        if ($c -and $c.Average -ne $null) { $cpuUsage = [int]$c.Average }
-    } catch {}
-
-    $ramTotalGB = 16.0
-    $ramUsedGB = 8.0
-    $ramPct = 50
-    try {
-        $osObj = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-        if ($osObj) {
-            $ramTotalGB = [Math]::Round($osObj.TotalVisibleMemorySize / 1024 / 1024, 1)
-            $free = [Math]::Round($osObj.FreePhysicalMemory / 1024 / 1024, 1)
-            $ramUsedGB = [Math]::Round($ramTotalGB - $free, 1)
-            $ramPct = [Math]::Round(($ramUsedGB / $ramTotalGB) * 100)
-        }
-    } catch {}
-
-    $diskTotalGB = 500; $diskFreeGB = 250; $diskPct = 50
-    try {
-        $d = Get-CimInstance Win32_LogicalDisk -Filter ""DeviceID='C:'"" -ErrorAction SilentlyContinue
-        if ($d -and $d.Size -gt 0) {
-            $diskTotalGB = [Math]::Round($d.Size / 1GB, 1)
-            $diskFreeGB = [Math]::Round($d.FreeSpace / 1GB, 1)
-            $diskPct = [Math]::Round((($d.Size - $d.FreeSpace) / $d.Size) * 100)
-        }
-    } catch {}
-
-    $uptimeSec = 3600
-    try {
-        if ($osObj -and $osObj.LastBootUpTime) {
-            $uptimeSec = [int]((Get-Date) - $osObj.LastBootUpTime).TotalSeconds
-        }
-    } catch {}
-
-    $netIn = [Math]::Round((Get-Random -Minimum 400 -Maximum 1100))
-    $netOut = [Math]::Round((Get-Random -Minimum 150 -Maximum 450))
-
-    $sigRaw = ""$agentId:$hostname:$timeStr:$token""
-    $hasher = [System.Security.Cryptography.SHA256]::Create()
-    $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($sigRaw))
-    $signature = [BitConverter]::ToString($hashBytes).Replace('-', '').ToLower()
-
-    $payload = @{
-        agentId = $agentId
-        code = $displayCode
-        hostname = $hostname
-        ip = $localIp
-        port = 8443
-        osType = $osCaption
-        cpu = $cpuUsage
-        ram = $ramPct
-        ramUsedGB = $ramUsedGB
-        ramTotalGB = $ramTotalGB
-        diskPercent = $diskPct
-        diskFreeGB = $diskFreeGB
-        diskTotalGB = $diskTotalGB
-        netInKB = $netIn
-        netOutKB = $netOut
-        uptimeSeconds = $uptimeSec
-        servicesRunning = 120
-        tunnelToken = $token
-        tunnelSignature = $signature
-    }
-
-    $json = $payload | ConvertTo-Json -Compress
-
-    try {
-        $headers = @{
-            'X-Tunnel-Token' = $token
-            'X-Tunnel-Signature' = $signature
-        }
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $res = Invoke-RestMethod -Uri ""$targetUrl/api/telemetry/report"" -Method Post -Body $json -Headers $headers -ContentType 'application/json; charset=utf-8' -TimeoutSec 3 -ErrorAction Stop
-        $sw.Stop()
-        $lat = $sw.ElapsedMilliseconds
-
-        Write-Host ""[$timeStr] "" -NoNewline -ForegroundColor DarkGray
-        Write-Host ""[TUNEL OK $lat ms] "" -NoNewline -ForegroundColor Green
-        Write-Host ""CPU: $cpuUsage% | RAM: $ramPct% ($ramUsedGB/$ramTotalGB GB) | Disco C: $diskPct% | Red: $netIn KB/s"" -ForegroundColor White
-    } catch {
-        Write-Host ""[$timeStr] [ESPERANDO MONITOR] Conectando a $targetUrl... (Codigo: $displayCode)"" -ForegroundColor DarkGray
-    }
-
-    Start-Sleep -Seconds $interval
-}
-";
-                File.WriteAllText(ps1File, ps1Content, Encoding.UTF8);
-
-                // iniciar_agente.bat
+                // Iniciar Agente Bat (con mini-ventana de status)
                 agentBatPath = Path.Combine(targetDir, "iniciar_agente.bat");
                 string batContent = "@echo off\r\n" +
                     "title Crashing LIVE - Agente de Monitoreo Windows\r\n" +
@@ -404,25 +347,28 @@ while ($true) {
                     "echo ===============================================================================\r\n" +
                     "echo                CRASHING LIVE - INICIANDO AGENTE WINDOWS\r\n" +
                     "echo ===============================================================================\r\n" +
-                    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0agent_daemon.ps1\" %*\r\n" +
-                    "pause\r\n";
+                    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0agent_daemon.ps1\" %*\r\n";
                 File.WriteAllText(agentBatPath, batContent, Encoding.Default);
 
-                // iniciar_agente_segundo_plano.vbs
-                string vbsFile = Path.Combine(targetDir, "iniciar_agente_segundo_plano.vbs");
-                string vbsContent = "Set WshShell = CreateObject(\"WScript.Shell\")\r\n" +
-                    "strPath = Replace(WScript.ScriptFullName, WScript.ScriptName, \"\")\r\n" +
-                    "WshShell.Run \"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\"\" & strPath & \"agent_daemon.ps1\"\"\", 0, False\r\n" +
-                    "Set WshShell = Nothing\r\n";
-                File.WriteAllText(vbsFile, vbsContent, Encoding.Default);
+                // Script de servicio desatendido 24/7 (Scheduled Task)
+                string installServiceBat = Path.Combine(targetDir, "instalar_servicio_windows.bat");
+                string serviceContent = "@echo off\r\n" +
+                    "title Instalar Agente Crashing LIVE como Servicio de Fondo\r\n" +
+                    "cd /d \"%~dp0\"\r\n" +
+                    "schtasks /delete /tn \"CrashingLiveAgent\" /f 2>nul\r\n" +
+                    "schtasks /create /tn \"CrashingLiveAgent\" /tr \"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \\\"%~dp0agent_daemon.ps1\\\" -Headless\" /sc onstart /ru \"NT AUTHORITY\\SYSTEM\" /rl highest /f\r\n" +
+                    "schtasks /run /tn \"CrashingLiveAgent\" 2>nul\r\n" +
+                    "echo Servicio Crashing LIVE instalado y ejecutandose 24/7 en segundo plano.\r\n";
+                File.WriteAllText(installServiceBat, serviceContent, Encoding.Default);
 
-                // detener_agente.bat
+                // Detener Agente Bat
                 string stopAgentBat = Path.Combine(targetDir, "detener_agente.bat");
                 string stopAgentContent = "@echo off\r\n" +
                     "echo Deteniendo procesos del Agente Crashing LIVE...\r\n" +
-                    "taskkill /f /fi \"WINDOWTITLE eq Crashing LIVE - Agente*\" 2>nul\r\n" +
-                    "powershell.exe -NoProfile -Command \"Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like '*agent_daemon.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }\" 2>nul\r\n" +
-                    "echo Agente detenido satisfactoriamente.\r\n" +
+                    "schtasks /end /tn \"CrashingLiveAgent\" 2>nul\r\n" +
+                    "taskkill /f /fi \"WINDOWTITLE eq Crashing LIVE*\" 2>nul\r\n" +
+                    "powershell.exe -NoProfile -Command \"Get-WmiObject Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent_daemon.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }\" 2>nul\r\n" +
+                    "echo Agente detenido.\r\n" +
                     "timeout /t 2 >nul\r\n";
                 File.WriteAllText(stopAgentBat, stopAgentContent, Encoding.Default);
             }
@@ -435,19 +381,6 @@ while ($true) {
                     "chcp 65001 >nul\r\n" +
                     "title Crashing LIVE - Monitor Central\r\n" +
                     "cd /d \"%~dp0\"\r\n" +
-                    "echo ===============================================================================\r\n" +
-                    "echo               CRASHING LIVE - INICIANDO PANEL DEL MONITOR CENTRAL\r\n" +
-                    "echo ===============================================================================\r\n" +
-                    "echo Verificando conexion con el Monitor Central en " + monitorUrl + "...\r\n\r\n" +
-                    "powershell.exe -NoProfile -Command \"try { $r = Invoke-WebRequest -Uri '" + monitorUrl + "/api/system/real-telemetry' -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop; exit 0 } catch { exit 1 }\" >nul 2>&1\r\n" +
-                    "if %errorlevel% neq 0 (\r\n" +
-                    "    echo [AVISO] El servidor en " + monitorUrl + " no parece estar respondiendo en este momento.\r\n" +
-                    "    if exist \"%~dp0..\\server.ts\" (\r\n" +
-                    "        echo Iniciando servidor local en segundo plano...\r\n" +
-                    "        start \"Crashing LIVE Server\" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"cd '%~dp0..'; npx.cmd tsx server.ts\"\r\n" +
-                    "        timeout /t 3 >nul\r\n" +
-                    "    )\r\n" +
-                    ")\r\n" +
                     "echo Abriendo interfaz de monitoreo en modo aplicacion...\r\n" +
                     "if exist \"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" (\r\n" +
                     "    start \"\" \"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" --app=\"" + monitorUrl + "\"\r\n" +
@@ -460,11 +393,6 @@ while ($true) {
                     "where msedge >nul 2>&1\r\n" +
                     "if %errorlevel% equ 0 (\r\n" +
                     "    start \"\" msedge --app=\"" + monitorUrl + "\"\r\n" +
-                    "    exit /b 0\r\n" +
-                    ")\r\n" +
-                    "where chrome >nul 2>&1\r\n" +
-                    "if %errorlevel% equ 0 (\r\n" +
-                    "    start \"\" chrome --app=\"" + monitorUrl + "\"\r\n" +
                     "    exit /b 0\r\n" +
                     ")\r\n" +
                     "start \"\" \"" + monitorUrl + "\"\r\n" +
@@ -480,51 +408,35 @@ while ($true) {
                 File.WriteAllText(stopMonBat, stopMonContent, Encoding.Default);
             }
 
-            // 3. INSTRUCCIONES
-            string readmeFile = Path.Combine(targetDir, "LEEME_INSTRUCCIONES.txt");
-            string readmeContent = "CRASHING LIVE - MONITOR & AGENTE PARA WINDOWS\r\n" +
-                "====================================================\r\n" +
-                "Modo instalado: " + mode.ToString() + "\r\n" +
-                "Directorio: " + targetDir + "\r\n" +
-                "Monitor URL: " + monitorUrl + "\r\n\r\n" +
-                "USO DE LOS ARCHIVOS:\r\n" +
-                "--------------------\r\n";
-
-            if (mode == InstallMode.AgentOnly || mode == InstallMode.Both)
-            {
-                readmeContent += "• iniciar_agente.bat:\r\n" +
-                    "  Inicia el agente con consola visible mostrando su Código AnyDesk generado.\r\n\r\n" +
-                    "• iniciar_agente_segundo_plano.vbs:\r\n" +
-                    "  Ejecuta el agente de forma silenciosa en segundo plano sin ocupar la pantalla.\r\n\r\n" +
-                    "• detener_agente.bat:\r\n" +
-                    "  Detiene la transmisión de telemetría.\r\n\r\n";
-            }
-
-            if (mode == InstallMode.MonitorOnly || mode == InstallMode.Both)
-            {
-                readmeContent += "• iniciar_monitor.bat:\r\n" +
-                    "  Abre el panel web en el navegador (" + monitorUrl + ").\r\n\r\n";
-            }
-
-            File.WriteAllText(readmeFile, readmeContent, Encoding.Default);
-
-            // 4. DESINSTALADOR
-            string uninstFile = Path.Combine(targetDir, "desinstalar.bat");
+            // 3. DESINSTALADOR LIMPIO EN LOTE
+            string uninstFile = Path.Combine(targetDir, "desinstalar_por_completo.bat");
             string uninstContent = "@echo off\r\n" +
-                "title Desinstalar Crashing LIVE\r\n" +
-                "echo Deteniendo procesos activos...\r\n" +
+                "title Desinstalar Crashing LIVE por Completo\r\n" +
+                "cd /d \"%~dp0\"\r\n" +
+                "echo ===============================================================================\r\n" +
+                "echo               DESINSTALACION LIMPIA DE CRASHING LIVE\r\n" +
+                "echo ===============================================================================\r\n" +
+                "echo Deteniendo servicios, tareas y procesos en segundo plano...\r\n" +
+                "schtasks /end /tn \"CrashingLiveAgent\" 2>nul\r\n" +
+                "schtasks /delete /tn \"CrashingLiveAgent\" /f 2>nul\r\n" +
+                "sc.exe stop CrashingLiveAgent 2>nul\r\n" +
+                "sc.exe delete CrashingLiveAgent 2>nul\r\n" +
                 "taskkill /f /fi \"WINDOWTITLE eq Crashing LIVE*\" 2>nul\r\n" +
+                "powershell.exe -NoProfile -Command \"Get-WmiObject Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent_daemon.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }\" 2>nul\r\n" +
+                "echo Eliminando accesos directos...\r\n" +
                 "del \"%USERPROFILE%\\Desktop\\Crashing LIVE Agente.lnk\" 2>nul\r\n" +
                 "del \"%USERPROFILE%\\Desktop\\Crashing LIVE Monitor.lnk\" 2>nul\r\n" +
-                "echo Eliminando archivos...\r\n" +
+                "echo Eliminando registros...\r\n" +
+                "reg.exe delete \"HKCU\\Software\\Crashing LIVE\" /f 2>nul\r\n" +
+                "echo Limpiando directorio de instalacion...\r\n" +
                 "timeout /t 1 >nul\r\n" +
                 "cd /d \"%LOCALAPPDATA%\"\r\n" +
                 "rmdir /s /q \"" + targetDir + "\" 2>nul\r\n" +
-                "echo Desinstalacion completa.\r\n" +
+                "echo [OK] Desinstalacion completa exitosa.\r\n" +
                 "pause\r\n";
             File.WriteAllText(uninstFile, uninstContent, Encoding.Default);
 
-            // 5. CREACIÓN DE ACCESOS DIRECTOS EN EL ESCRITORIO CON ICONO OFICIAL
+            // 4. ACCESOS DIRECTOS
             if (createShortcuts)
             {
                 string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -584,8 +496,10 @@ while ($true) {
         private Button btnOpenFolder;
         private ProgressBar prgBar;
         private Label lblStatus;
+        private Label lblUpgradeBadge;
         private Panel pnlHeader;
         private string installedDir = "";
+        private bool isUpgrade = false;
 
         public InstallerForm()
         {
@@ -594,13 +508,15 @@ while ($true) {
 
         private void InitializeComponent()
         {
-            this.Text = "Crashing LIVE - Asistente de Instalación y Mantenimiento";
-            this.Size = new Size(590, 590);
+            this.Text = "Crashing LIVE - Asistente de Instalación & Mantenimiento";
+            this.Size = new Size(600, 610);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
-            this.BackColor = Color.FromArgb(18, 18, 22);
-            this.ForeColor = Color.White;
+
+            // PALETA ESTRICTA TEMA OSCURO
+            this.BackColor = Color.FromArgb(18, 18, 18);     // #121212
+            this.ForeColor = Color.FromArgb(255, 255, 255); // #FFFFFF
             this.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
 
             try
@@ -613,16 +529,16 @@ while ($true) {
             pnlHeader = new Panel();
             pnlHeader.Dock = DockStyle.Top;
             pnlHeader.Height = 85;
-            pnlHeader.BackColor = Color.FromArgb(12, 12, 14);
+            pnlHeader.BackColor = Color.FromArgb(24, 24, 24); // #181818
             pnlHeader.Paint += (s, e) => {
                 try {
-                    using (Pen pen = new Pen(Color.FromArgb(40, 40, 48))) {
+                    using (Pen pen = new Pen(Color.FromArgb(42, 42, 42))) { // #2A2A2A
                         e.Graphics.DrawLine(pen, 0, pnlHeader.Height - 1, pnlHeader.Width, pnlHeader.Height - 1);
                     }
                     if (this.Icon != null) {
                         e.Graphics.DrawIcon(this.Icon, 18, 18);
                     } else {
-                        using (SolidBrush b = new SolidBrush(Color.FromArgb(0, 255, 102))) {
+                        using (SolidBrush b = new SolidBrush(Color.FromArgb(255, 102, 0))) { // #FF6600
                             e.Graphics.FillEllipse(b, 22, 26, 14, 14);
                         }
                     }
@@ -632,50 +548,59 @@ while ($true) {
             Label lblTitle = new Label();
             lblTitle.Text = "CRASHING LIVE MONITOR & AGENTE";
             lblTitle.Font = new Font("Segoe UI", 12.5f, FontStyle.Bold);
-            lblTitle.ForeColor = Color.White;
-            lblTitle.Location = new Point(68, 18);
+            lblTitle.ForeColor = Color.FromArgb(255, 102, 0); // #FF6600 Acento
+            lblTitle.Location = new Point(68, 16);
             lblTitle.AutoSize = true;
             pnlHeader.Controls.Add(lblTitle);
 
             Label lblSub = new Label();
-            lblSub.Text = "Instalador Nativo para Windows 10, 11 y Windows Server";
+            lblSub.Text = "Instalador y Actualizador para Windows 10, 11 y Windows Server";
             lblSub.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
-            lblSub.ForeColor = Color.FromArgb(160, 160, 170);
-            lblSub.Location = new Point(68, 46);
+            lblSub.ForeColor = Color.FromArgb(170, 170, 170);
+            lblSub.Location = new Point(68, 44);
             lblSub.AutoSize = true;
             pnlHeader.Controls.Add(lblSub);
+
+            lblUpgradeBadge = new Label();
+            lblUpgradeBadge.Text = "MODO ACTUALIZACIÓN DETECTADO";
+            lblUpgradeBadge.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+            lblUpgradeBadge.ForeColor = Color.FromArgb(0, 230, 118); // #00E676 Verde
+            lblUpgradeBadge.Location = new Point(340, 18);
+            lblUpgradeBadge.AutoSize = true;
+            lblUpgradeBadge.Visible = false;
+            pnlHeader.Controls.Add(lblUpgradeBadge);
 
             this.Controls.Add(pnlHeader);
 
             // Selector de Modo de Instalación
             GroupBox grpMode = new GroupBox();
-            grpMode.Text = "Seleccione la opción deseada:";
-            grpMode.ForeColor = Color.FromArgb(0, 255, 102);
+            grpMode.Text = "Seleccione el tipo de instalación:";
+            grpMode.ForeColor = Color.FromArgb(255, 102, 0); // #FF6600
             grpMode.Location = new Point(25, 95);
-            grpMode.Size = new Size(525, 135);
+            grpMode.Size = new Size(535, 135);
 
             rbAgentOnly = new RadioButton();
-            rbAgentOnly.Text = "Solo Agente de Monitoreo (Recomendado para equipos a supervisar)";
+            rbAgentOnly.Text = "Solo Agente de Monitoreo (Equipos Windows a supervisar)";
             rbAgentOnly.Checked = true;
             rbAgentOnly.Location = new Point(15, 22);
-            rbAgentOnly.Size = new Size(495, 24);
+            rbAgentOnly.Size = new Size(505, 24);
             rbAgentOnly.ForeColor = Color.White;
             rbAgentOnly.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             rbAgentOnly.CheckedChanged += Mode_CheckedChanged;
             grpMode.Controls.Add(rbAgentOnly);
 
             Label lblAgentDesc = new Label();
-            lblAgentDesc.Text = "Telemetría nativa en tiempo real. Genera Código AnyDesk para enlazar al Monitor.";
+            lblAgentDesc.Text = "Telemetría saliente continua estilo AnyDesk. Incluye mini-ventana de status flotante.";
             lblAgentDesc.Location = new Point(35, 46);
-            lblAgentDesc.Size = new Size(475, 18);
-            lblAgentDesc.ForeColor = Color.FromArgb(160, 160, 170);
+            lblAgentDesc.Size = new Size(485, 18);
+            lblAgentDesc.ForeColor = Color.FromArgb(160, 160, 160);
             lblAgentDesc.Font = new Font("Segoe UI", 8.25f);
             grpMode.Controls.Add(lblAgentDesc);
 
             rbMonitorOnly = new RadioButton();
-            rbMonitorOnly.Text = "Solo Monitor Central (Servidor / Dashboard Web)";
+            rbMonitorOnly.Text = "Solo Monitor Central (Servidor Hub / Dashboard Web)";
             rbMonitorOnly.Location = new Point(15, 68);
-            rbMonitorOnly.Size = new Size(495, 24);
+            rbMonitorOnly.Size = new Size(505, 24);
             rbMonitorOnly.ForeColor = Color.White;
             rbMonitorOnly.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             rbMonitorOnly.CheckedChanged += Mode_CheckedChanged;
@@ -684,7 +609,7 @@ while ($true) {
             rbBoth = new RadioButton();
             rbBoth.Text = "Ambos (Agente + Monitor Central en este mismo equipo)";
             rbBoth.Location = new Point(15, 98);
-            rbBoth.Size = new Size(495, 24);
+            rbBoth.Size = new Size(505, 24);
             rbBoth.ForeColor = Color.White;
             rbBoth.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             rbBoth.CheckedChanged += Mode_CheckedChanged;
@@ -697,15 +622,15 @@ while ($true) {
             lblUrlHint.Text = "URL del Monitor Central (al que transmitirá este agente):";
             lblUrlHint.Location = new Point(25, 238);
             lblUrlHint.AutoSize = true;
-            lblUrlHint.ForeColor = Color.FromArgb(210, 210, 215);
+            lblUrlHint.ForeColor = Color.FromArgb(200, 200, 200);
             this.Controls.Add(lblUrlHint);
 
             txtMonitorUrl = new TextBox();
             txtMonitorUrl.Text = "http://localhost:3000";
             txtMonitorUrl.Location = new Point(25, 260);
-            txtMonitorUrl.Size = new Size(525, 26);
-            txtMonitorUrl.BackColor = Color.FromArgb(28, 28, 34);
-            txtMonitorUrl.ForeColor = Color.FromArgb(0, 255, 102);
+            txtMonitorUrl.Size = new Size(535, 26);
+            txtMonitorUrl.BackColor = Color.FromArgb(28, 28, 28);
+            txtMonitorUrl.ForeColor = Color.FromArgb(0, 230, 118); // #00E676 Verde
             txtMonitorUrl.BorderStyle = BorderStyle.FixedSingle;
             this.Controls.Add(txtMonitorUrl);
 
@@ -714,14 +639,14 @@ while ($true) {
             lblPathTitle.Text = "Carpeta de Instalación en disco:";
             lblPathTitle.Location = new Point(25, 295);
             lblPathTitle.AutoSize = true;
-            lblPathTitle.ForeColor = Color.FromArgb(210, 210, 215);
+            lblPathTitle.ForeColor = Color.FromArgb(200, 200, 200);
             this.Controls.Add(lblPathTitle);
 
             txtPath = new TextBox();
             txtPath.Text = Program.GetDefaultInstallDir();
             txtPath.Location = new Point(25, 318);
-            txtPath.Size = new Size(435, 26);
-            txtPath.BackColor = Color.FromArgb(28, 28, 34);
+            txtPath.Size = new Size(445, 26);
+            txtPath.BackColor = Color.FromArgb(28, 28, 28);
             txtPath.ForeColor = Color.White;
             txtPath.BorderStyle = BorderStyle.FixedSingle;
             txtPath.TextChanged += (s, e) => { CheckInstalledState(); };
@@ -729,12 +654,12 @@ while ($true) {
 
             Button btnBrowse = new Button();
             btnBrowse.Text = "Examinar...";
-            btnBrowse.Location = new Point(468, 317);
+            btnBrowse.Location = new Point(478, 317);
             btnBrowse.Size = new Size(82, 28);
-            btnBrowse.BackColor = Color.FromArgb(40, 40, 48);
+            btnBrowse.BackColor = Color.FromArgb(36, 36, 36);
             btnBrowse.ForeColor = Color.White;
             btnBrowse.FlatStyle = FlatStyle.Flat;
-            btnBrowse.FlatAppearance.BorderColor = Color.FromArgb(60, 60, 70);
+            btnBrowse.FlatAppearance.BorderColor = Color.FromArgb(50, 50, 50);
             btnBrowse.Click += (s, e) => {
                 using (FolderBrowserDialog fbd = new FolderBrowserDialog()) {
                     fbd.SelectedPath = txtPath.Text;
@@ -747,50 +672,50 @@ while ($true) {
 
             // Checkbox accesos directos
             chkShortcuts = new CheckBox();
-            chkShortcuts.Text = "Crear accesos directos con icono oficial en el Escritorio";
+            chkShortcuts.Text = "Crear accesos directos en el Escritorio";
             chkShortcuts.Checked = true;
             chkShortcuts.Location = new Point(25, 355);
-            chkShortcuts.Size = new Size(525, 24);
-            chkShortcuts.ForeColor = Color.FromArgb(230, 230, 235);
+            chkShortcuts.Size = new Size(535, 24);
+            chkShortcuts.ForeColor = Color.FromArgb(220, 220, 220);
             this.Controls.Add(chkShortcuts);
 
             // Progress bar
             prgBar = new ProgressBar();
             prgBar.Location = new Point(25, 390);
-            prgBar.Size = new Size(525, 16);
+            prgBar.Size = new Size(535, 14);
             prgBar.Visible = false;
             this.Controls.Add(prgBar);
 
             // Status label
             lblStatus = new Label();
-            lblStatus.Text = "Listo para iniciar. Elija la opción y presione 'Instalar Ahora'.";
+            lblStatus.Text = "Listo para iniciar instalación.";
             lblStatus.Location = new Point(25, 415);
-            lblStatus.Size = new Size(525, 24);
-            lblStatus.ForeColor = Color.FromArgb(160, 160, 170);
+            lblStatus.Size = new Size(535, 36);
+            lblStatus.ForeColor = Color.FromArgb(160, 160, 160);
             this.Controls.Add(lblStatus);
 
-            // Botón Desinstalar
+            // Botón Desinstalar Limpio
             btnUninstall = new Button();
-            btnUninstall.Text = "🗑️ Desinstalar";
-            btnUninstall.Location = new Point(25, 480);
-            btnUninstall.Size = new Size(130, 40);
-            btnUninstall.BackColor = Color.FromArgb(48, 24, 28);
-            btnUninstall.ForeColor = Color.FromArgb(255, 120, 120);
-            btnUninstall.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            btnUninstall.Text = "🗑️ Desinstalar por Completo";
+            btnUninstall.Location = new Point(25, 490);
+            btnUninstall.Size = new Size(185, 42);
+            btnUninstall.BackColor = Color.FromArgb(38, 21, 23);
+            btnUninstall.ForeColor = Color.FromArgb(255, 82, 82);
+            btnUninstall.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             btnUninstall.FlatStyle = FlatStyle.Flat;
-            btnUninstall.FlatAppearance.BorderColor = Color.FromArgb(100, 40, 48);
+            btnUninstall.FlatAppearance.BorderColor = Color.FromArgb(102, 34, 38);
             btnUninstall.Click += BtnUninstall_Click;
             this.Controls.Add(btnUninstall);
 
             // Botón Abrir Carpeta
             btnOpenFolder = new Button();
-            btnOpenFolder.Text = "📂 Carpeta";
-            btnOpenFolder.Location = new Point(165, 480);
-            btnOpenFolder.Size = new Size(100, 40);
-            btnOpenFolder.BackColor = Color.FromArgb(34, 34, 42);
+            btnOpenFolder.Text = "📂 Abrir Carpeta";
+            btnOpenFolder.Location = new Point(218, 490);
+            btnOpenFolder.Size = new Size(115, 42);
+            btnOpenFolder.BackColor = Color.FromArgb(28, 28, 28);
             btnOpenFolder.ForeColor = Color.White;
             btnOpenFolder.FlatStyle = FlatStyle.Flat;
-            btnOpenFolder.FlatAppearance.BorderColor = Color.FromArgb(60, 60, 72);
+            btnOpenFolder.FlatAppearance.BorderColor = Color.FromArgb(42, 42, 42);
             btnOpenFolder.Visible = false;
             btnOpenFolder.Click += (s, e) => {
                 if (!string.IsNullOrEmpty(installedDir) && Directory.Exists(installedDir)) {
@@ -799,12 +724,12 @@ while ($true) {
             };
             this.Controls.Add(btnOpenFolder);
 
-            // Botón Instalar
+            // Botón Instalar / Actualizar (Naranja #FF6600)
             btnInstall = new Button();
             btnInstall.Text = "Instalar Ahora";
-            btnInstall.Location = new Point(285, 480);
-            btnInstall.Size = new Size(150, 40);
-            btnInstall.BackColor = Color.FromArgb(0, 255, 102);
+            btnInstall.Location = new Point(340, 490);
+            btnInstall.Size = new Size(140, 42);
+            btnInstall.BackColor = Color.FromArgb(255, 102, 0); // #FF6600 Naranja
             btnInstall.ForeColor = Color.Black;
             btnInstall.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
             btnInstall.FlatStyle = FlatStyle.Flat;
@@ -815,12 +740,12 @@ while ($true) {
             // Botón Cancelar/Cerrar
             btnCancel = new Button();
             btnCancel.Text = "Cerrar";
-            btnCancel.Location = new Point(445, 480);
-            btnCancel.Size = new Size(105, 40);
-            btnCancel.BackColor = Color.FromArgb(34, 34, 42);
+            btnCancel.Location = new Point(488, 490);
+            btnCancel.Size = new Size(72, 42);
+            btnCancel.BackColor = Color.FromArgb(28, 28, 28);
             btnCancel.ForeColor = Color.White;
             btnCancel.FlatStyle = FlatStyle.Flat;
-            btnCancel.FlatAppearance.BorderColor = Color.FromArgb(50, 50, 60);
+            btnCancel.FlatAppearance.BorderColor = Color.FromArgb(42, 42, 42);
             btnCancel.Click += (s, e) => { this.Close(); };
             this.Controls.Add(btnCancel);
 
@@ -830,14 +755,22 @@ while ($true) {
         private void CheckInstalledState()
         {
             string dir = txtPath.Text.Trim();
-            if (Directory.Exists(dir) && (File.Exists(Path.Combine(dir, "agent_daemon.ps1")) || File.Exists(Path.Combine(dir, "iniciar_monitor.bat"))))
+            isUpgrade = Program.IsPreviousInstallationPresent(dir);
+
+            if (isUpgrade)
             {
-                lblStatus.Text = "Aplicación instalada detectada en la ruta. Puede Reinstalar o Desinstalar.";
-                lblStatus.ForeColor = Color.FromArgb(255, 200, 100);
+                lblUpgradeBadge.Visible = true;
+                btnInstall.Text = "Actualizar (Upgrade)";
+                lblStatus.Text = "Versión previa detectada. La actualización preservará su Código AnyDesk e ID existente.";
+                lblStatus.ForeColor = Color.FromArgb(0, 230, 118); // #00E676
                 btnUninstall.Enabled = true;
             }
             else
             {
+                lblUpgradeBadge.Visible = false;
+                btnInstall.Text = "Instalar Ahora";
+                lblStatus.Text = "Listo para iniciar instalación limpia en este equipo.";
+                lblStatus.ForeColor = Color.FromArgb(160, 160, 160);
                 btnUninstall.Enabled = Directory.Exists(dir);
             }
         }
@@ -862,11 +795,11 @@ while ($true) {
             if (string.IsNullOrEmpty(targetDir)) targetDir = Program.GetDefaultInstallDir();
 
             DialogResult dr = MessageBox.Show(
-                "¿Está seguro de que desea DESINSTALAR Crashing LIVE de su PC?\n\n" +
-                "• Se detendrán los procesos del agente.\n" +
-                "• Se eliminarán los archivos en: " + targetDir + "\n" +
-                "• Se quitarán los accesos directos del escritorio.",
-                "Confirmar Desinstalación",
+                "¿Desea DESINSTALAR POR COMPLETO Crashing LIVE de este equipo?\n\n" +
+                "• Se detendrán y eliminarán las tareas y servicios de Windows.\n" +
+                "• Se borrarán los binarios y logs en: " + targetDir + "\n" +
+                "• Se eliminarán los accesos directos y claves de registro asociadas.",
+                "Confirmar Desinstalación Limpia",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning
             );
@@ -874,8 +807,9 @@ while ($true) {
             if (dr != DialogResult.Yes) return;
 
             prgBar.Visible = true;
-            prgBar.Value = 40;
-            lblStatus.Text = "Deteniendo servicios y eliminando aplicación...";
+            prgBar.Value = 35;
+            lblStatus.Text = "Deteniendo servicios y eliminando archivos por completo...";
+            lblStatus.ForeColor = Color.FromArgb(255, 82, 82);
             Application.DoEvents();
 
             try
@@ -883,11 +817,11 @@ while ($true) {
                 Program.DoUninstall(targetDir);
 
                 prgBar.Value = 100;
-                lblStatus.Text = "¡Crashing LIVE ha sido completamente desinstalado de su PC!";
-                lblStatus.ForeColor = Color.FromArgb(0, 255, 102);
+                lblStatus.Text = "¡Crashing LIVE ha sido completamente eliminado del sistema!";
+                lblStatus.ForeColor = Color.FromArgb(0, 230, 118);
 
                 MessageBox.Show(
-                    "Crashing LIVE ha sido completamente desinstalado de este equipo.",
+                    "Desinstalación limpia completada con éxito.\nNo quedan tareas ni servicios residuales en el equipo.",
                     "Desinstalación Completa",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information
@@ -908,7 +842,7 @@ while ($true) {
             btnUninstall.Enabled = false;
             prgBar.Visible = true;
             prgBar.Value = 25;
-            lblStatus.Text = "Configurando archivos en disco...";
+            lblStatus.Text = isUpgrade ? "Deteniendo procesos previos y actualizando binarios..." : "Configurando instalación en disco...";
             Application.DoEvents();
 
             string targetDir = txtPath.Text.Trim();
@@ -924,62 +858,38 @@ while ($true) {
             try
             {
                 prgBar.Value = 60;
-                lblStatus.Text = "Creando scripts de " + (mode == InstallMode.AgentOnly ? "Agente" : mode == InstallMode.MonitorOnly ? "Monitor Central" : "Agente y Monitor") + " y accesos directos...";
-                Application.DoEvents();
-
                 Program.DoInstall(targetDir, mode, txtMonitorUrl.Text.Trim(), chkShortcuts.Checked);
 
                 prgBar.Value = 100;
-                lblStatus.Text = "¡Instalación completada exitosamente!";
-                lblStatus.ForeColor = Color.FromArgb(0, 255, 102);
+                string msgSuccess = isUpgrade 
+                    ? "¡Actualización completada con éxito! Su configuración previa e IDs se mantuvieron intactos."
+                    : "¡Instalación completada con éxito!";
+
+                lblStatus.Text = msgSuccess;
+                lblStatus.ForeColor = Color.FromArgb(0, 230, 118); // #00E676
 
                 btnOpenFolder.Visible = true;
-                btnCancel.Text = "Cerrar";
+                btnCancel.Text = "Finalizar";
                 btnCancel.Enabled = true;
+                btnInstall.Enabled = true;
                 btnUninstall.Enabled = true;
 
-                if (mode == InstallMode.AgentOnly || mode == InstallMode.Both)
-                {
-                    btnInstall.Text = "▶ Iniciar Agente";
-                    btnInstall.Enabled = true;
-                    btnInstall.Click -= BtnInstall_Click;
-                    btnInstall.Click += (s, ev) => {
-                        string bat = Path.Combine(targetDir, "iniciar_agente.bat");
-                        if (File.Exists(bat)) Process.Start(bat);
-                        this.Close();
-                    };
-                }
-                else
-                {
-                    btnInstall.Text = "▶ Iniciar Monitor";
-                    btnInstall.Enabled = true;
-                    btnInstall.Click -= BtnInstall_Click;
-                    btnInstall.Click += (s, ev) => {
-                        string bat = Path.Combine(targetDir, "iniciar_monitor.bat");
-                        if (File.Exists(bat)) Process.Start(bat);
-                        this.Close();
-                    };
-                }
-
-                string msg = "Crashing LIVE se ha instalado correctamente en:\n" + targetDir + 
-                    "\n\nModo instalado: " + (mode == InstallMode.AgentOnly ? "Agente de Monitoreo" : mode == InstallMode.MonitorOnly ? "Monitor Central" : "Agente + Monitor");
-                
-                if (chkShortcuts.Checked)
-                {
-                    msg += "\n\nSe han creado los accesos directos con icono oficial en su Escritorio.";
-                }
-
-                MessageBox.Show(msg, "Instalación Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(
+                    msgSuccess + "\n\nCarpeta: " + targetDir,
+                    "Crashing LIVE",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
             }
             catch (Exception ex)
             {
                 prgBar.Visible = false;
                 lblStatus.Text = "Error: " + ex.Message;
-                lblStatus.ForeColor = Color.FromArgb(255, 90, 90);
+                lblStatus.ForeColor = Color.FromArgb(255, 82, 82);
                 btnInstall.Enabled = true;
                 btnCancel.Enabled = true;
                 btnUninstall.Enabled = true;
-                MessageBox.Show("Error durante la instalación:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Ocurrió un error: " + ex.Message, "Error Crashing LIVE", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }

@@ -432,12 +432,31 @@ while ($true) {
             {
                 monitorBatPath = Path.Combine(targetDir, "iniciar_monitor.bat");
                 string monitorContent = "@echo off\r\n" +
+                    "chcp 65001 >nul\r\n" +
                     "title Crashing LIVE - Monitor Central\r\n" +
                     "cd /d \"%~dp0\"\r\n" +
                     "echo ===============================================================================\r\n" +
                     "echo               CRASHING LIVE - INICIANDO PANEL DEL MONITOR CENTRAL\r\n" +
                     "echo ===============================================================================\r\n" +
-                    "echo Abriendo monitor en la barra de tareas como aplicacion...\r\n" +
+                    "echo Verificando conexion con el Monitor Central en " + monitorUrl + "...\r\n\r\n" +
+                    "powershell.exe -NoProfile -Command \"try { $r = Invoke-WebRequest -Uri '" + monitorUrl + "/api/system/real-telemetry' -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop; exit 0 } catch { exit 1 }\" >nul 2>&1\r\n" +
+                    "if %errorlevel% neq 0 (\r\n" +
+                    "    echo [AVISO] El servidor en " + monitorUrl + " no parece estar respondiendo en este momento.\r\n" +
+                    "    if exist \"%~dp0..\\server.ts\" (\r\n" +
+                    "        echo Iniciando servidor local en segundo plano...\r\n" +
+                    "        start \"Crashing LIVE Server\" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"cd '%~dp0..'; npx.cmd tsx server.ts\"\r\n" +
+                    "        timeout /t 3 >nul\r\n" +
+                    "    )\r\n" +
+                    ")\r\n" +
+                    "echo Abriendo interfaz de monitoreo en modo aplicacion...\r\n" +
+                    "if exist \"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" (\r\n" +
+                    "    start \"\" \"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" --app=\"" + monitorUrl + "\"\r\n" +
+                    "    exit /b 0\r\n" +
+                    ")\r\n" +
+                    "if exist \"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" (\r\n" +
+                    "    start \"\" \"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" --app=\"" + monitorUrl + "\"\r\n" +
+                    "    exit /b 0\r\n" +
+                    ")\r\n" +
                     "where msedge >nul 2>&1\r\n" +
                     "if %errorlevel% equ 0 (\r\n" +
                     "    start \"\" msedge --app=\"" + monitorUrl + "\"\r\n" +
@@ -450,7 +469,7 @@ while ($true) {
                     ")\r\n" +
                     "start \"\" \"" + monitorUrl + "\"\r\n" +
                     "exit /b 0\r\n";
-                File.WriteAllText(monitorBatPath, monitorContent, Encoding.Default);
+                File.WriteAllText(monitorBatPath, monitorContent, Encoding.UTF8);
 
                 string stopMonBat = Path.Combine(targetDir, "detener_monitor.bat");
                 string stopMonContent = "@echo off\r\n" +

@@ -514,16 +514,16 @@ namespace CrashingLiveInstaller
                     "cd /d \"%~dp0\"\r\n" +
                     "echo Abriendo interfaz de monitoreo en modo aplicacion...\r\n" +
                     "if exist \"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" (\r\n" +
-                    "    start \"\" \"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" --app=\"" + monitorUrl + "\"\r\n" +
+                    "    start \"\" \"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" --app=\"" + monitorUrl + "\" --disable-gpu\r\n" +
                     "    exit /b 0\r\n" +
                     ")\r\n" +
                     "if exist \"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" (\r\n" +
-                    "    start \"\" \"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" --app=\"" + monitorUrl + "\"\r\n" +
+                    "    start \"\" \"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe\" --app=\"" + monitorUrl + "\" --disable-gpu\r\n" +
                     "    exit /b 0\r\n" +
                     ")\r\n" +
                     "where msedge >nul 2>&1\r\n" +
                     "if %errorlevel% equ 0 (\r\n" +
-                    "    start \"\" msedge --app=\"" + monitorUrl + "\"\r\n" +
+                    "    start \"\" msedge --app=\"" + monitorUrl + "\" --disable-gpu\r\n" +
                     "    exit /b 0\r\n" +
                     ")\r\n" +
                     "start \"\" \"" + monitorUrl + "\"\r\n" +

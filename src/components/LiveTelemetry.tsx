@@ -43,10 +43,34 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
   const [processSortBy, setProcessSortBy] = useState<'cpu' | 'memory'>('cpu');
   const [processSearchQuery, setProcessSearchQuery] = useState<string>('');
 
-  // Servidor seleccionado
+  // Servidor seleccionado con fallback seguro y defensivo
+  const defaultFallbackServer: ConnectedServer = useMemo(() => ({
+    id: 'waiting-agent',
+    name: 'Esperando Agente',
+    host: '127.0.0.1',
+    port: 8443,
+    osType: 'Windows Server 2022',
+    token: '',
+    ssl: true,
+    isCurrent: true,
+    status: 'OFFLINE',
+    latencyMs: 0,
+    lastPing: 'Sin conexión',
+    agentId: '---',
+    isLocalDiscovered: false,
+    cpu: 0,
+    ram: 0,
+    ramUsedGB: 0,
+    ramTotalGB: 16.0,
+    netInKB: 0,
+    netOutKB: 0,
+    diskReadMB: 0,
+    diskWriteMB: 0,
+  }), []);
+
   const activeServer = useMemo(() => {
-    return servers.find((s) => s.id === currentServerId) || servers[0];
-  }, [servers, currentServerId]);
+    return (servers.find((s) => s.id === currentServerId) || servers[0]) || defaultFallbackServer;
+  }, [servers, currentServerId, defaultFallbackServer]);
 
   // Métricas globales rápidas de los servidores conectados
   const clusterStats = useMemo(() => {

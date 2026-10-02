@@ -262,7 +262,9 @@ export async function fetchConnectedAgents(): Promise<AgentSessionData[]> {
     const res = await fetch('/api/agents');
     if (!res.ok) return [];
     const data = await res.json();
-    return data.agents || [];
+    if (Array.isArray(data.agents)) return data.agents;
+    if (data.agents && typeof data.agents === 'object') return Object.values(data.agents);
+    return [];
   } catch (err) {
     console.warn('Error fetching connected agents list:', err);
     return [];
@@ -274,7 +276,7 @@ export async function fetchAgentProcesses(agentId: string): Promise<ProcessItem[
     const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/processes`);
     if (!res.ok) return [];
     const data = await res.json();
-    return data.processes || [];
+    return Array.isArray(data.processes) ? data.processes : [];
   } catch {
     return [];
   }
@@ -293,6 +295,8 @@ export function subscribeToTelemetryStream(
         const list = JSON.parse(event.data);
         if (Array.isArray(list)) {
           onData(list);
+        } else if (list && typeof list === 'object') {
+          onData(Object.values(list));
         }
       } catch (err) {
         console.warn('Error parsing SSE telemetry:', err);
@@ -303,7 +307,7 @@ export function subscribeToTelemetryStream(
       if (!pollInterval) {
         pollInterval = setInterval(async () => {
           const agents = await fetchConnectedAgents();
-          if (agents && agents.length > 0) {
+          if (Array.isArray(agents)) {
             onData(agents);
           }
         }, 2500);
@@ -312,7 +316,7 @@ export function subscribeToTelemetryStream(
   } catch {
     pollInterval = setInterval(async () => {
       const agents = await fetchConnectedAgents();
-      if (agents && agents.length > 0) {
+      if (Array.isArray(agents)) {
         onData(agents);
       }
     }, 2500);

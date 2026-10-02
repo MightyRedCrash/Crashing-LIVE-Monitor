@@ -37,22 +37,22 @@ echo.
 echo [3/3] Abriendo interfaz del Monitor...
 
 if exist "%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe" (
-    start "" "%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe" --app="http://localhost:3000"
+    start "" "%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe" --app="http://localhost:3000" --disable-gpu
     goto mostrar_menu
 )
 
 if exist "%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe" (
-    start "" "%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe" --app="http://localhost:3000"
+    start "" "%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe" --app="http://localhost:3000" --disable-gpu
     goto mostrar_menu
 )
 
 if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
-    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app="http://localhost:3000"
+    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app="http://localhost:3000" --disable-gpu
     goto mostrar_menu
 )
 
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app="http://localhost:3000"
+    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app="http://localhost:3000" --disable-gpu
     goto mostrar_menu
 )
 

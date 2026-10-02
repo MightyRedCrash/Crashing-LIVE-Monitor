@@ -102,60 +102,7 @@ export const DirectAnydeskModal: React.FC<DirectAnydeskModalProps> = ({
     status: 'ONLINE' | 'OFFLINE';
     cpu: number;
     ram: number;
-  }>>([
-    {
-      id: 'srv-node-1',
-      agentId: '948 201 143',
-      name: 'WINSRV-2022-DC01',
-      ip: '192.168.1.140',
-      port: 8443,
-      osType: 'Windows Server 2022 Datacenter',
-      latencyMs: 1,
-      mac: '00:15:5D:84:A2:10',
-      status: 'ONLINE',
-      cpu: 24,
-      ram: 64,
-    },
-    {
-      id: 'srv-node-2',
-      agentId: '834 192 750',
-      name: 'WIN11-DEV-STATION',
-      ip: '192.168.1.88',
-      port: 8443,
-      osType: 'Windows 11 Pro 23H2',
-      latencyMs: 2,
-      mac: 'E4:5F:01:3C:99:A4',
-      status: 'ONLINE',
-      cpu: 18,
-      ram: 52,
-    },
-    {
-      id: 'srv-node-4',
-      agentId: '550 184 902',
-      name: 'CONTABILIDAD-PC',
-      ip: '192.168.1.55',
-      port: 8443,
-      osType: 'Windows 10 Pro',
-      latencyMs: 1,
-      mac: '70:85:C2:55:12:88',
-      status: 'ONLINE',
-      cpu: 12,
-      ram: 45,
-    },
-    {
-      id: 'srv-node-3',
-      agentId: '712 409 338',
-      name: 'WINSRV-BACKUP02',
-      ip: '10.0.2.14',
-      port: 8443,
-      osType: 'Windows Server 2019',
-      latencyMs: 4,
-      mac: '00:15:5D:71:02:B9',
-      status: 'ONLINE',
-      cpu: 42,
-      ram: 70,
-    },
-  ]);
+  }>>([]);
 
   // Cargar ID del monitor propio y sincronizar agentes conectados en red
   useEffect(() => {

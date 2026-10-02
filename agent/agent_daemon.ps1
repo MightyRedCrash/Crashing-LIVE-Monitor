@@ -8,6 +8,22 @@ param (
     [switch]$Headless
 )
 
+# Ocultar ventana negra de consola si se inicio en modo GUI interactivo
+if (-not $NoGui -and -not $Headless -and ($env:CRASHINGLIVE_HEADLESS -ne '1')) {
+    try {
+        Add-Type -Name Win32Window -Namespace Win32Utils -MemberDefinition @"
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetConsoleWindow();
+"@ -ErrorAction SilentlyContinue
+        $hWnd = [Win32Utils.Win32Window]::GetConsoleWindow()
+        if ($hWnd -ne [IntPtr]::Zero) {
+            [Win32Utils.Win32Window]::ShowWindow($hWnd, 0) | Out-Null
+        }
+    } catch {}
+}
+
 $Host.UI.RawUI.WindowTitle = "Crashing LIVE - Agente de Telemetria Windows"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -113,11 +129,16 @@ Write-Host "====================================================================
 Write-Host "  Presione Ctrl+C en cualquier momento para detener el agente." -ForegroundColor DarkGray
 Write-Host ""
 
-# Determinar si levantamos la mini-ventana GUI flotante
+# Variables para la GUI moderna y responsive
 $enableGui = (-not $NoGui) -and (-not $Headless) -and ($env:CRASHINGLIVE_HEADLESS -ne '1')
 $guiForm = $null
 $hubBadges = @{}
-$lblGuiMetrics = $null
+$lblCpuVal = $null
+$lblRamVal = $null
+$pnlCpuTrack = $null
+$pnlCpuFill = $null
+$pnlRamTrack = $null
+$pnlRamFill = $null
 
 if ($enableGui) {
     try {
@@ -125,83 +146,193 @@ if ($enableGui) {
 
         $guiForm = New-Object System.Windows.Forms.Form
         $guiForm.Text = "Crashing LIVE - Agente Status"
-        $calcHeight = 240 + ($targetUrls.Count * 40)
-        $guiForm.Size = New-Object System.Drawing.Size(460, $calcHeight)
+        $guiForm.Size = New-Object System.Drawing.Size(520, 480)
+        $guiForm.MinimumSize = New-Object System.Drawing.Size(460, 380)
         $guiForm.StartPosition = "CenterScreen"
         $guiForm.TopMost = $true
         $guiForm.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 18)
         $guiForm.ForeColor = [System.Drawing.Color]::White
-        $guiForm.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
-        $guiForm.MaximizeBox = $false
+        $guiForm.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::Sizable
+        $guiForm.MaximizeBox = $true
 
-        # Panel Header
+        # 1. Panel Header Superior (Identificación y AnyDesk ID)
         $pnlHeader = New-Object System.Windows.Forms.Panel
         $pnlHeader.Dock = [System.Windows.Forms.DockStyle]::Top
-        $pnlHeader.Height = 65
+        $pnlHeader.Height = 88
         $pnlHeader.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 24)
         $guiForm.Controls.Add($pnlHeader)
 
         $lblTitle = New-Object System.Windows.Forms.Label
-        $lblTitle.Text = "CRASHING LIVE - AGENTE STATUS"
+        $lblTitle.Text = "CRASHING LIVE • AGENTE STATUS"
         $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
         $lblTitle.ForeColor = [System.Drawing.Color]::FromArgb(255, 102, 0)
-        $lblTitle.Location = New-Object System.Drawing.Point(12, 10)
+        $lblTitle.Location = New-Object System.Drawing.Point(14, 10)
         $lblTitle.AutoSize = $true
         $pnlHeader.Controls.Add($lblTitle)
 
-        $lblSub = New-Object System.Windows.Forms.Label
-        $lblSub.Text = "ID: " + $agentId + "  |  Codigo AnyDesk: " + $displayCode + "  |  " + $hostname
-        $lblSub.Font = New-Object System.Drawing.Font("Consolas", 8.5)
-        $lblSub.ForeColor = [System.Drawing.Color]::FromArgb(160, 160, 160)
-        $lblSub.Location = New-Object System.Drawing.Point(12, 34)
-        $lblSub.AutoSize = $true
-        $pnlHeader.Controls.Add($lblSub)
+        $lblBase = New-Object System.Windows.Forms.Label
+        $lblBase.Text = "$hostname ($localIp) • $osCaption"
+        $lblBase.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+        $lblBase.ForeColor = [System.Drawing.Color]::FromArgb(160, 160, 160)
+        $lblBase.Location = New-Object System.Drawing.Point(14, 32)
+        $lblBase.AutoSize = $true
+        $pnlHeader.Controls.Add($lblBase)
 
-        # Metricas Label
-        $lblGuiMetrics = New-Object System.Windows.Forms.Label
-        $lblGuiMetrics.Text = "CPU: 0%  |  RAM: 0%  |  Procesos: 0  |  Saliente 443"
-        $lblGuiMetrics.Font = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Bold)
-        $lblGuiMetrics.ForeColor = [System.Drawing.Color]::White
-        $lblGuiMetrics.Location = New-Object System.Drawing.Point(12, 75)
-        $lblGuiMetrics.Size = New-Object System.Drawing.Size(420, 20)
-        $guiForm.Controls.Add($lblGuiMetrics)
+        # Badge del Código AnyDesk
+        $pnlAnydesk = New-Object System.Windows.Forms.Panel
+        $pnlAnydesk.Location = New-Object System.Drawing.Point(14, 54)
+        $pnlAnydesk.Size = New-Object System.Drawing.Size(470, 24)
+        $pnlAnydesk.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right)
+        $pnlAnydesk.BackColor = [System.Drawing.Color]::FromArgb(32, 32, 32)
+        $pnlHeader.Controls.Add($pnlAnydesk)
+
+        $lblCode = New-Object System.Windows.Forms.Label
+        $lblCode.Text = "CÓDIGO ANYDESK: $displayCode   •   ID: $agentId"
+        $lblCode.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+        $lblCode.ForeColor = [System.Drawing.Color]::FromArgb(0, 230, 118)
+        $lblCode.Location = New-Object System.Drawing.Point(8, 4)
+        $lblCode.AutoSize = $true
+        $pnlAnydesk.Controls.Add($lblCode)
+
+        # 2. Panel de Métricas Locales Compactas con Barras de Progreso
+        $pnlMetrics = New-Object System.Windows.Forms.Panel
+        $pnlMetrics.Dock = [System.Windows.Forms.DockStyle]::Top
+        $pnlMetrics.Height = 92
+        $pnlMetrics.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 18)
+        $guiForm.Controls.Add($pnlMetrics)
+
+        # Fila CPU
+        $lblCpuTitle = New-Object System.Windows.Forms.Label
+        $lblCpuTitle.Text = "CPU"
+        $lblCpuTitle.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+        $lblCpuTitle.ForeColor = [System.Drawing.Color]::FromArgb(180, 180, 180)
+        $lblCpuTitle.Location = New-Object System.Drawing.Point(14, 10)
+        $lblCpuTitle.AutoSize = $true
+        $pnlMetrics.Controls.Add($lblCpuTitle)
+
+        $lblCpuVal = New-Object System.Windows.Forms.Label
+        $lblCpuVal.Text = "0%"
+        $lblCpuVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+        $lblCpuVal.ForeColor = [System.Drawing.Color]::White
+        $lblCpuVal.Location = New-Object System.Drawing.Point(420, 10)
+        $lblCpuVal.Size = New-Object System.Drawing.Size(65, 16)
+        $lblCpuVal.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
+        $lblCpuVal.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right)
+        $pnlMetrics.Controls.Add($lblCpuVal)
+
+        $pnlCpuTrack = New-Object System.Windows.Forms.Panel
+        $pnlCpuTrack.Location = New-Object System.Drawing.Point(14, 28)
+        $pnlCpuTrack.Size = New-Object System.Drawing.Size(470, 7)
+        $pnlCpuTrack.BackColor = [System.Drawing.Color]::FromArgb(38, 38, 38)
+        $pnlCpuTrack.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right)
+        $pnlMetrics.Controls.Add($pnlCpuTrack)
+
+        $pnlCpuFill = New-Object System.Windows.Forms.Panel
+        $pnlCpuFill.Location = New-Object System.Drawing.Point(0, 0)
+        $pnlCpuFill.Size = New-Object System.Drawing.Size(10, 7)
+        $pnlCpuFill.BackColor = [System.Drawing.Color]::FromArgb(0, 230, 118)
+        $pnlCpuTrack.Controls.Add($pnlCpuFill)
+
+        # Fila RAM
+        $lblRamTitle = New-Object System.Windows.Forms.Label
+        $lblRamTitle.Text = "MEMORIA RAM"
+        $lblRamTitle.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+        $lblRamTitle.ForeColor = [System.Drawing.Color]::FromArgb(180, 180, 180)
+        $lblRamTitle.Location = New-Object System.Drawing.Point(14, 46)
+        $lblRamTitle.AutoSize = $true
+        $pnlMetrics.Controls.Add($lblRamTitle)
+
+        $lblRamVal = New-Object System.Windows.Forms.Label
+        $lblRamVal.Text = "0% (0 / 16 GB)"
+        $lblRamVal.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+        $lblRamVal.ForeColor = [System.Drawing.Color]::White
+        $lblRamVal.Location = New-Object System.Drawing.Point(320, 46)
+        $lblRamVal.Size = New-Object System.Drawing.Size(165, 16)
+        $lblRamVal.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
+        $lblRamVal.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right)
+        $pnlMetrics.Controls.Add($lblRamVal)
+
+        $pnlRamTrack = New-Object System.Windows.Forms.Panel
+        $pnlRamTrack.Location = New-Object System.Drawing.Point(14, 65)
+        $pnlRamTrack.Size = New-Object System.Drawing.Size(470, 7)
+        $pnlRamTrack.BackColor = [System.Drawing.Color]::FromArgb(38, 38, 38)
+        $pnlRamTrack.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right)
+        $pnlMetrics.Controls.Add($pnlRamTrack)
+
+        $pnlRamFill = New-Object System.Windows.Forms.Panel
+        $pnlRamFill.Location = New-Object System.Drawing.Point(0, 0)
+        $pnlRamFill.Size = New-Object System.Drawing.Size(10, 7)
+        $pnlRamFill.BackColor = [System.Drawing.Color]::FromArgb(255, 102, 0)
+        $pnlRamTrack.Controls.Add($pnlRamFill)
+
+        # 3. Encabezado de la lista de monitores
+        $pnlMonHeader = New-Object System.Windows.Forms.Panel
+        $pnlMonHeader.Dock = [System.Windows.Forms.DockStyle]::Top
+        $pnlMonHeader.Height = 26
+        $pnlMonHeader.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 18)
+        $guiForm.Controls.Add($pnlMonHeader)
 
         $lblMonTitle = New-Object System.Windows.Forms.Label
-        $lblMonTitle.Text = "MONITORES REGISTRADOS (CONEXION SALIENTE):"
+        $lblMonTitle.Text = "MONITORES REGISTRADOS (CONEXIÓN SALIENTE):"
         $lblMonTitle.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
         $lblMonTitle.ForeColor = [System.Drawing.Color]::FromArgb(140, 140, 140)
-        $lblMonTitle.Location = New-Object System.Drawing.Point(12, 100)
+        $lblMonTitle.Location = New-Object System.Drawing.Point(14, 6)
         $lblMonTitle.AutoSize = $true
-        $guiForm.Controls.Add($lblMonTitle)
+        $pnlMonHeader.Controls.Add($lblMonTitle)
 
-        # Fila de cada monitor
-        $yPos = 125
+        # 4. Footer Inferior Sutil
+        $pnlFooter = New-Object System.Windows.Forms.Panel
+        $pnlFooter.Dock = [System.Windows.Forms.DockStyle]::Bottom
+        $pnlFooter.Height = 26
+        $pnlFooter.BackColor = [System.Drawing.Color]::FromArgb(22, 22, 22)
+        $guiForm.Controls.Add($pnlFooter)
+
+        $lblFooter = New-Object System.Windows.Forms.Label
+        $lblFooter.Text = "Modelo Saliente (Outbound-only) • Cierre la ventana para detener el agente"
+        $lblFooter.Font = New-Object System.Drawing.Font("Segoe UI", 7.5)
+        $lblFooter.ForeColor = [System.Drawing.Color]::FromArgb(110, 110, 110)
+        $lblFooter.Location = New-Object System.Drawing.Point(14, 6)
+        $lblFooter.AutoSize = $true
+        $pnlFooter.Controls.Add($lblFooter)
+
+        # 5. Contenedor de Tarjetas de Monitores (Flexible y Scrollable)
+        $pnlCardsContainer = New-Object System.Windows.Forms.Panel
+        $pnlCardsContainer.Dock = [System.Windows.Forms.DockStyle]::Fill
+        $pnlCardsContainer.AutoScroll = $true
+        $pnlCardsContainer.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 18)
+        $guiForm.Controls.Add($pnlCardsContainer)
+
+        $yPos = 6
         foreach ($url in $targetUrls) {
             $pnlCard = New-Object System.Windows.Forms.Panel
-            $pnlCard.Location = New-Object System.Drawing.Point(12, $yPos)
-            $pnlCard.Size = New-Object System.Drawing.Size(420, 32)
-            $pnlCard.BackColor = [System.Drawing.Color]::FromArgb(28, 28, 28)
-            $guiForm.Controls.Add($pnlCard)
+            $pnlCard.Location = New-Object System.Drawing.Point(14, $yPos)
+            $pnlCard.Size = New-Object System.Drawing.Size(470, 38)
+            $pnlCard.BackColor = [System.Drawing.Color]::FromArgb(26, 26, 26)
+            $pnlCard.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right)
+            $pnlCardsContainer.Controls.Add($pnlCard)
 
             $lblUrl = New-Object System.Windows.Forms.Label
             $lblUrl.Text = $url
-            $lblUrl.Font = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Bold)
+            $lblUrl.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
             $lblUrl.ForeColor = [System.Drawing.Color]::White
-            $lblUrl.Location = New-Object System.Drawing.Point(8, 8)
-            $lblUrl.AutoSize = $true
+            $lblUrl.Location = New-Object System.Drawing.Point(10, 10)
+            $lblUrl.Size = New-Object System.Drawing.Size(290, 20)
+            $lblUrl.AutoEllipsis = $true
+            $lblUrl.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right)
             $pnlCard.Controls.Add($lblUrl)
 
             $lblBadge = New-Object System.Windows.Forms.Label
             $lblBadge.Text = "[CONECTANDO...]"
-            $lblBadge.Font = New-Object System.Drawing.Font("Consolas", 9, [System.Drawing.FontStyle]::Bold)
-            $lblBadge.ForeColor = [System.Drawing.Color]::Orange
-            $lblBadge.Location = New-Object System.Drawing.Point(260, 8)
-            $lblBadge.Size = New-Object System.Drawing.Size(150, 18)
+            $lblBadge.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+            $lblBadge.ForeColor = [System.Drawing.Color]::FromArgb(255, 160, 0)
+            $lblBadge.Location = New-Object System.Drawing.Point(305, 10)
+            $lblBadge.Size = New-Object System.Drawing.Size(155, 20)
             $lblBadge.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
+            $lblBadge.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right)
             $pnlCard.Controls.Add($lblBadge)
 
             $hubBadges[$url] = $lblBadge
-            $yPos += 38
+            $yPos += 46
         }
 
         $guiForm.Show()
@@ -305,9 +436,18 @@ while ($true) {
     # 4. Top Procesos Estilo Task Manager
     $topProcesses = Get-TopProcessesList -Limit 15
 
-    # Actualizar metricas en la mini-ventana flotante
-    if ($lblGuiMetrics) {
-        $lblGuiMetrics.Text = "CPU: " + $cpuUsage + "%  |  RAM: " + $ramPct + "% (" + $ramUsedGB + "/" + $ramTotalGB + " GB)  |  Procesos: " + $topProcesses.Count
+    # Actualizar metricas en la mini-ventana flotante (barras estilizadas y valores)
+    if ($lblCpuVal -and $pnlCpuFill -and $pnlCpuTrack) {
+        $lblCpuVal.Text = "$cpuUsage%"
+        $newCpuWidth = [Math]::Max(2, [int](($pnlCpuTrack.Width * $cpuUsage) / 100))
+        $pnlCpuFill.Width = [Math]::Min($pnlCpuTrack.Width, $newCpuWidth)
+        $pnlCpuFill.BackColor = if ($cpuUsage -gt 80) { [System.Drawing.Color]::FromArgb(255, 82, 82) } elseif ($cpuUsage -gt 50) { [System.Drawing.Color]::FromArgb(255, 102, 0) } else { [System.Drawing.Color]::FromArgb(0, 230, 118) }
+    }
+    if ($lblRamVal -and $pnlRamFill -and $pnlRamTrack) {
+        $lblRamVal.Text = "$ramPct% ($ramUsedGB / $ramTotalGB GB)"
+        $newRamWidth = [Math]::Max(2, [int](($pnlRamTrack.Width * $ramPct) / 100))
+        $pnlRamFill.Width = [Math]::Min($pnlRamTrack.Width, $newRamWidth)
+        $pnlRamFill.BackColor = if ($ramPct -gt 85) { [System.Drawing.Color]::FromArgb(255, 82, 82) } else { [System.Drawing.Color]::FromArgb(255, 102, 0) }
     }
 
     # Armar payload

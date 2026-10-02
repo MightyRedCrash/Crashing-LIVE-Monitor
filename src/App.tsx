@@ -105,79 +105,34 @@ export default function App() {
   const [showAndroidSim, setShowAndroidSim] = useState(false);
   const [showQuickBanner, setShowQuickBanner] = useState(false);
 
-  // Connected Servers List
-  const [servers, setServers] = useState<ConnectedServer[]>([
-    {
-      id: 'srv-node-1',
-      name: 'WINSRV-2022-DC01',
-      host: '192.168.1.140',
-      port: 8443,
-      osType: 'Windows Server 2022',
-      token: 'clk_live_tok_dc01',
-      ssl: true,
-      isCurrent: true,
-      status: 'ONLINE',
-      latencyMs: 2,
-      lastPing: 'En vivo',
-      agentId: 'CL-948-201-143',
-      isLocalDiscovered: true,
-      cpu: 25,
-      ram: 66,
-      ramUsedGB: 10.6,
-      ramTotalGB: 16.0,
-      netInKB: 2900,
-      netOutKB: 980,
-      diskReadMB: 3.1,
-      diskWriteMB: 1.4,
-    },
-    {
-      id: 'srv-node-2',
-      name: 'WIN11-DEV-STATION',
-      host: '192.168.1.88',
-      port: 8443,
-      osType: 'Windows 11 Pro',
-      token: 'clk_live_tok_win11',
-      ssl: false,
-      isCurrent: false,
-      status: 'ONLINE',
-      latencyMs: 4,
-      lastPing: 'Hace 1m',
-      agentId: 'CL-834-192-750',
-      isLocalDiscovered: true,
-      cpu: 18,
-      ram: 54,
-      ramUsedGB: 8.6,
-      ramTotalGB: 16.0,
-      netInKB: 1450,
-      netOutKB: 420,
-      diskReadMB: 1.8,
-      diskWriteMB: 0.6,
-    },
-    {
-      id: 'srv-node-3',
-      name: 'WINSRV-BACKUP02',
-      host: '10.0.2.14',
-      port: 8443,
-      osType: 'Windows Server 2019',
-      token: 'clk_live_tok_bk02',
-      ssl: true,
-      isCurrent: false,
-      status: 'ONLINE',
-      latencyMs: 9,
-      lastPing: 'Hace 2m',
-      agentId: 'CL-712-409-338',
-      isLocalDiscovered: true,
-      cpu: 44,
-      ram: 72,
-      ramUsedGB: 23.0,
-      ramTotalGB: 32.0,
-      netInKB: 6800,
-      netOutKB: 4100,
-      diskReadMB: 14.2,
-      diskWriteMB: 8.5,
-    }
-  ]);
-  const [currentServerId, setCurrentServerId] = useState<string>('srv-node-1');
+  // Connected Servers List (100% Reactiva: únicamente nodos reales con conexión activa vía socket/API)
+  const [servers, setServers] = useState<ConnectedServer[]>([]);
+  const [currentServerId, setCurrentServerId] = useState<string>('');
+
+  // Fallback Server para cuando todavía no se ha conectado ningún agente
+  const fallbackServer: ConnectedServer = {
+    id: 'waiting-agent',
+    name: 'Esperando Agente...',
+    host: '127.0.0.1',
+    port: 8443,
+    osType: 'Windows Server 2022',
+    token: '',
+    ssl: true,
+    isCurrent: true,
+    status: 'OFFLINE',
+    latencyMs: 0,
+    lastPing: 'Sin conexión activa',
+    agentId: '---',
+    isLocalDiscovered: false,
+    cpu: 0,
+    ram: 0,
+    ramUsedGB: 0,
+    ramTotalGB: 16.0,
+    netInKB: 0,
+    netOutKB: 0,
+    diskReadMB: 0,
+    diskWriteMB: 0,
+  };
 
   // Core Data States
   const [wizardConfig, setWizardConfig] = useState<WizardConfig>(defaultWizardConfig);
@@ -192,7 +147,9 @@ export default function App() {
   const [serverSwitchToast, setServerSwitchToast] = useState<string | null>(null);
 
   // Active connected server object
-  const currentServer = servers.find((s) => s.id === currentServerId) || servers[0];
+  const currentServer = (servers.length > 0
+    ? (servers.find((s) => s.id === currentServerId) || servers[0])
+    : fallbackServer);
 
   // Real-Time Telemetry Stream
   const [metricsHistory, setMetricsHistory] = useState<SystemMetricPoint[]>([
@@ -259,25 +216,6 @@ export default function App() {
     fetchRealSystemTelemetry().then((real) => {
       if (real && real.isRealHost) {
         setRealHardwareData(real);
-        // Automatically sync the first local node with REAL computer metrics
-        setServers((prev) =>
-          prev.map((s, idx) =>
-            idx === 0
-              ? {
-                  ...s,
-                  name: real.hostname,
-                  host: real.ip,
-                  port: real.port,
-                  osType: real.osName as any,
-                  cpu: real.cpu,
-                  ram: real.ram,
-                  ramUsedGB: real.ramUsedGB,
-                  ramTotalGB: real.ramTotalGB,
-                  lastPing: 'Hardware Real',
-                }
-              : s
-          )
-        );
         // Update wizard config with real values
         setWizardConfig((prev) => ({
           ...prev,
@@ -313,76 +251,46 @@ export default function App() {
       const now = new Date();
       const timeStr = now.toTimeString().split(' ')[0];
 
-      setServers((prevServers) => {
-        let updated = [...prevServers];
-
-        agentsList.forEach((agent) => {
-          const matchIndex = updated.findIndex(
-            (s) =>
-              (agent.serverId && s.id === agent.serverId) ||
-              s.agentId === agent.agentId ||
-              s.name === agent.hostname
-          );
-
-          const isOnline = agent.status === 'ONLINE';
-
-          if (matchIndex !== -1) {
-            const existing = updated[matchIndex];
-            updated[matchIndex] = {
-              ...existing,
-              status: agent.status,
-              cpu: agent.cpu,
-              ram: agent.ram,
-              ramUsedGB: agent.ramUsedGB,
-              ramTotalGB: agent.ramTotalGB,
-              netInKB: agent.netInKB,
-              netOutKB: agent.netOutKB,
-              diskPercent: agent.diskPercent ?? existing.diskPercent,
-              diskFreeGB: agent.diskFreeGB ?? existing.diskFreeGB,
-              diskTotalGB: agent.diskTotalGB ?? existing.diskTotalGB,
-              servicesRunning: agent.servicesRunning ?? existing.servicesRunning,
-              processes:
-                agent.processes && agent.processes.length > 0
-                  ? agent.processes
-                  : existing.processes,
-              uptimeSeconds: agent.uptimeSeconds ?? existing.uptimeSeconds,
-              lastPing: isOnline ? 'En vivo (SSE Hub)' : 'Desconectado (>20s)',
-              latencyMs: isOnline ? 2 : 999,
-            };
-          } else {
-            // Nuevo nodo descubierto automáticamente por reporte saliente del agente
-            updated.push({
-              id: agent.serverId || `agent-${agent.agentId.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-              name: agent.hostname,
-              host: agent.ip,
-              port: agent.port,
-              osType: agent.osType as any,
-              token: 'clk_live_tok_auto',
-              ssl: true,
-              isCurrent: false,
-              status: agent.status,
-              latencyMs: 2,
-              lastPing: isOnline ? 'En vivo (Agente Saliente)' : 'Offline',
-              agentId: agent.agentId,
-              isLocalDiscovered: true,
-              cpu: agent.cpu,
-              ram: agent.ram,
-              ramUsedGB: agent.ramUsedGB,
-              ramTotalGB: agent.ramTotalGB,
-              netInKB: agent.netInKB,
-              netOutKB: agent.netOutKB,
-              diskPercent: agent.diskPercent,
-              diskFreeGB: agent.diskFreeGB,
-              diskTotalGB: agent.diskTotalGB,
-              servicesRunning: agent.servicesRunning,
-              processes: agent.processes,
-              uptimeSeconds: agent.uptimeSeconds,
-            });
-          }
-        });
-
-        return updated;
+      const mappedServers: ConnectedServer[] = agentsList.map((agent, idx) => {
+        const isOnline = agent.status === 'ONLINE';
+        const srvId = agent.serverId || `agent-${agent.agentId.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+        return {
+          id: srvId,
+          name: agent.hostname,
+          host: agent.ip,
+          port: agent.port,
+          osType: agent.osType as any,
+          token: 'clk_live_tok_auto',
+          ssl: true,
+          isCurrent: idx === 0,
+          status: agent.status,
+          latencyMs: isOnline ? 2 : 999,
+          lastPing: isOnline ? 'En vivo (Agente Saliente)' : 'Desconectado (>20s)',
+          agentId: agent.agentId,
+          isLocalDiscovered: true,
+          cpu: agent.cpu,
+          ram: agent.ram,
+          ramUsedGB: agent.ramUsedGB,
+          ramTotalGB: agent.ramTotalGB,
+          netInKB: agent.netInKB,
+          netOutKB: agent.netOutKB,
+          diskPercent: agent.diskPercent,
+          diskFreeGB: agent.diskFreeGB,
+          diskTotalGB: agent.diskTotalGB,
+          servicesRunning: agent.servicesRunning,
+          processes: agent.processes,
+          uptimeSeconds: agent.uptimeSeconds,
+        };
       });
+
+      setServers(mappedServers);
+
+      if (mappedServers.length > 0) {
+        setCurrentServerId((prevId) => {
+          const exists = mappedServers.some((s) => s.id === prevId);
+          return exists ? prevId : mappedServers[0].id;
+        });
+      }
 
       // Si el servidor seleccionado actualmente se reportó en el flujo, agregar punto de telemetría
       const activeAgent = agentsList.find(
@@ -468,70 +376,7 @@ export default function App() {
         } catch {}
       }
 
-      // 2. Si es el nodo local o el agente de este host
-      fetchRealSystemTelemetry()
-        .then((real) => {
-          if (real && real.isRealHost) {
-            setRealHardwareData(real);
-            const newPoint: SystemMetricPoint = {
-              time: timeStr,
-              cpu: real.cpu,
-              ram: real.ram,
-              ramUsedGB: real.ramUsedGB,
-              ramTotalGB: real.ramTotalGB,
-              netInKB: 2400 + Math.round((Math.random() - 0.5) * 800),
-              netOutKB: 920 + Math.round((Math.random() - 0.5) * 400),
-              diskReadMB: Number((Math.random() * 5).toFixed(1)),
-              diskWriteMB: Number((Math.random() * 3).toFixed(1)),
-            };
-            setMetricsHistory((prev) => [...prev.slice(-19), newPoint]);
-
-            // Sync current server if it's the local host
-            setServers((prev) =>
-              prev.map((s) =>
-                s.id === 'srv-node-1'
-                  ? {
-                      ...s,
-                      cpu: real.cpu,
-                      ram: real.ram,
-                      ramUsedGB: real.ramUsedGB,
-                      ramTotalGB: real.ramTotalGB,
-                      lastPing: 'Hardware Real (En vivo)',
-                    }
-                  : s
-              )
-            );
-          } else {
-            // Simulated noise fallback
-            setMetricsHistory((prev) => {
-              const last = prev[prev.length - 1] || currentMetric;
-              const cpuNoise = (Math.random() - 0.48) * 8;
-              const newCpu = Math.min(95, Math.max(12, Math.round(last.cpu + cpuNoise)));
-
-              const ramDelta = (Math.random() - 0.5) * 0.1;
-              const newRamGB = Math.min(15.2, Math.max(8.0, Number((last.ramUsedGB + ramDelta).toFixed(2))));
-              const newRamPct = Math.round((newRamGB / 16.0) * 100);
-
-              const newNetIn = Math.max(800, Math.round(last.netInKB + (Math.random() - 0.5) * 1200));
-              const newNetOut = Math.max(300, Math.round(last.netOutKB + (Math.random() - 0.5) * 600));
-
-              const newPoint: SystemMetricPoint = {
-                time: timeStr,
-                cpu: newCpu,
-                ram: newRamPct,
-                ramUsedGB: newRamGB,
-                ramTotalGB: 16.0,
-                netInKB: newNetIn,
-                netOutKB: newNetOut,
-                diskReadMB: Number((Math.random() * 8).toFixed(1)),
-                diskWriteMB: Number((Math.random() * 4).toFixed(1)),
-              };
-
-              return [...prev.slice(-19), newPoint];
-            });
-          }
-        })
-        .catch(() => {});
+      // 2. Si no hay conexión activa, no inventamos datos ni servidores falsos
     }, intervalMs);
 
     return () => clearInterval(timer);
@@ -878,6 +723,8 @@ export default function App() {
         onOpenWizard={() => setShowWizard(true)}
         onOpenHelp={() => setShowHelpModal(true)}
         onOpenAndroidSim={() => setShowAndroidSim(true)}
+        onDownloadExe={downloadNativeExe}
+        onDownloadZip={handleDownloadZip}
         agentConnected={agentConnected}
         servers={servers}
         currentServerId={currentServerId}
@@ -1013,116 +860,6 @@ export default function App() {
                     <span className="text-white">{realHardwareData.ramUsedGB} / {realHardwareData.ramTotalGB} GB RAM</span>
                   </div>
                 )}
-              </div>
-
-              {/* 2. Menú Hamburguesa dedicado EXCLUSIVAMENTE a la Descarga Directa del Instalador */}
-              <div className="flex items-center gap-2.5">
-                <div className="relative">
-                  <button
-                    onClick={() => {
-                      setInstallMenuOpen(!installMenuOpen);
-                      setMonitorMenuOpen(false);
-                    }}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-xs font-bold transition-all border shadow-sm ${
-                      installMenuOpen
-                        ? 'bg-[#00ff66] text-black border-[#00ff66] shadow-[0_0_15px_rgba(0,255,102,0.4)]'
-                        : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-700/80 text-white hover:border-[#00ff66]/60'
-                    }`}
-                    title="Menú: Descarga del Instalador .EXE"
-                  >
-                    <Menu className="w-4 h-4 text-[#00ff66]" />
-                    <Download className="w-3.5 h-3.5 text-zinc-300" />
-                    <span className="hidden sm:inline">Instalador .EXE</span>
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${installMenuOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {/* Menú Dropdown: DESCARGA DIRECTA .EXE Y .ZIP */}
-                  {installMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-80 sm:w-[420px] rounded-2xl bg-zinc-950/98 backdrop-blur-xl border border-zinc-800 shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 font-mono text-xs space-y-3">
-                      <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-[#00ff66] text-black font-black flex items-center justify-center text-xs">
-                            CL
-                          </div>
-                          <div>
-                            <span className="text-white font-bold uppercase text-[11px] tracking-wide block">
-                              Instalador Oficial .EXE
-                            </span>
-                            <span className="text-[10px] text-zinc-400">
-                              Crashing LIVE Monitor & Agente
-                            </span>
-                          </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded bg-[#00ff66]/20 text-[#00ff66] text-[10px] font-black border border-[#00ff66]/30">
-                          EJECUTABLE WINDOWS
-                        </span>
-                      </div>
-
-                      <p className="text-[11px] text-zinc-300 leading-relaxed">
-                        Instala <strong>todo lo necesario</strong> para que el aplicativo funcione de inmediato en cualquier equipo Windows: ejecutables nativos autónomos (no requiere instalar Python ni Node), registro del servicio de fondo, reglas de cortafuegos y accesos directos oficiales en <strong>C:\Program Files\Crashing LIVE</strong> (o en la carpeta que usted especifique).
-                      </p>
-
-                      <div className="space-y-1.5 text-[10px] text-zinc-300 bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800">
-                        <strong className="text-white block text-[11px] mb-1">Accesos directos en el Escritorio según su elección:</strong>
-                        <div className="flex items-center gap-1.5 text-sky-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-                          <span><strong>Ambos instalados:</strong> Genera acceso al <em>Monitor</em> y al <em>Agente</em>.</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-zinc-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b00]" />
-                          <span><strong>Solo Agente:</strong> Genera únicamente el acceso a <em>Crashing LIVE Agente</em>.</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-zinc-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#00ff66]" />
-                          <span><strong>Solo Monitor:</strong> Genera únicamente el acceso a <em>Crashing LIVE Monitor</em>.</span>
-                        </div>
-                      </div>
-
-                      {/* Botón Principal: Descargar .EXE Nativo */}
-                      <button
-                        onClick={() => {
-                          downloadNativeExe();
-                          setInstallMenuOpen(false);
-                        }}
-                        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#00ff66] hover:bg-[#00dd55] text-black font-black text-xs font-mono transition-all shadow-[0_0_20px_rgba(0,255,102,0.4)]"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span>DESCARGAR INSTALADOR (.EXE OFICIAL)</span>
-                      </button>
-
-                      {/* Botón Secundario: Descargar Paquete ZIP */}
-                      <button
-                        onClick={() => {
-                          handleDownloadZip();
-                          setInstallMenuOpen(false);
-                        }}
-                        disabled={isDownloadingZip}
-                        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-700 text-[11px] font-mono transition-colors disabled:opacity-50"
-                      >
-                        {isDownloadingZip ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Empaquetando ZIP...</span>
-                          </>
-                        ) : (
-                          <>
-                            <FolderArchive className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>Descargar Paquete ZIP (Incluye .EXE y Scripts)</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Acceso rápido a App Android */}
-                <button
-                  onClick={() => setMainSection('android')}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border font-mono text-xs font-bold transition-all bg-zinc-900/90 hover:bg-zinc-850 border-zinc-700/80 text-cyan-300 hover:border-cyan-400"
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>App Android (APK)</span>
-                </button>
               </div>
             </div>
           ) : mainSection === 'installers' ? (

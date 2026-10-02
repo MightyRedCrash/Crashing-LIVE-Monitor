@@ -19,7 +19,9 @@ import {
   Smartphone,
   Zap,
   SlidersHorizontal,
-  CheckCircle2
+  CheckCircle2,
+  Download,
+  FolderArchive
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -35,6 +37,8 @@ interface HeaderProps {
   onOpenWizard: () => void;
   onOpenHelp: () => void;
   onOpenAndroidSim: () => void;
+  onDownloadExe?: () => void;
+  onDownloadZip?: () => void;
   agentConnected: boolean;
   servers: ConnectedServer[];
   currentServerId: string;
@@ -57,6 +61,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWizard,
   onOpenHelp,
   onOpenAndroidSim,
+  onDownloadExe,
+  onDownloadZip,
   agentConnected,
   servers,
   currentServerId,
@@ -292,6 +298,47 @@ export const Header: React.FC<HeaderProps> = ({
                     <HelpCircle className="w-4 h-4 text-cyan-400" />
                     <span>Guía y Ayuda</span>
                   </button>
+                </div>
+
+                {/* Subsección: Descargas e Instaladores */}
+                <div className="pt-2 mt-2 border-t border-zinc-900 space-y-1">
+                  <div className="text-[10px] text-zinc-500 uppercase px-3 py-1 font-bold">
+                    Descargas & Instaladores
+                  </div>
+                  {onDownloadExe && (
+                    <button
+                      onClick={() => {
+                        setToolsDropdownOpen(false);
+                        onDownloadExe();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-zinc-300 hover:text-[#00ff66] hover:bg-zinc-900 flex items-center gap-2.5 transition-colors"
+                    >
+                      <Download className="w-4 h-4 text-[#00ff66]" />
+                      <span className="font-semibold">Instalador Windows (.EXE)</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setToolsDropdownOpen(false);
+                      onOpenAndroidSim();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-zinc-300 hover:text-cyan-300 hover:bg-zinc-900 flex items-center gap-2.5 transition-colors"
+                  >
+                    <Smartphone className="w-4 h-4 text-cyan-400" />
+                    <span>App Android (APK)</span>
+                  </button>
+                  {onDownloadZip && (
+                    <button
+                      onClick={() => {
+                        setToolsDropdownOpen(false);
+                        onDownloadZip();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-zinc-300 hover:text-amber-300 hover:bg-zinc-900 flex items-center gap-2.5 transition-colors"
+                    >
+                      <FolderArchive className="w-4 h-4 text-amber-400" />
+                      <span>Paquete Portable (.ZIP)</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Subsección: Estado y Tema */}

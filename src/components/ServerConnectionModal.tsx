@@ -63,52 +63,17 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
   const [testMessage, setTestMessage] = useState<string>('');
 
   // Equipos detectados automáticamente en la red local (LAN)
-  const [localDetectedAgents, setLocalDetectedAgents] = useState([
-    {
-      agentId: '948 201 143',
-      name: 'WINSRV-2022-DC01',
-      ip: '192.168.1.140',
-      port: 8443,
-      osType: 'Windows Server 2022 Datacenter',
-      latencyMs: 1,
-      cpu: 24,
-      ram: 64,
-      isLocal: true,
-    },
-    {
-      agentId: '834 192 750',
-      name: 'WIN11-DEV-STATION',
-      ip: '192.168.1.88',
-      port: 8443,
-      osType: 'Windows 11 Pro',
-      latencyMs: 2,
-      cpu: 18,
-      ram: 52,
-      isLocal: true,
-    },
-    {
-      agentId: '550 184 902',
-      name: 'CONTABILIDAD-PC',
-      ip: '192.168.1.55',
-      port: 8443,
-      osType: 'Windows 10 Pro',
-      latencyMs: 1,
-      cpu: 14,
-      ram: 46,
-      isLocal: true,
-    },
-    {
-      agentId: '712 409 338',
-      name: 'WINSRV-BACKUP02',
-      ip: '10.0.2.14',
-      port: 8443,
-      osType: 'Windows Server 2019',
-      latencyMs: 4,
-      cpu: 42,
-      ram: 70,
-      isLocal: true,
-    },
-  ]);
+  const [localDetectedAgents, setLocalDetectedAgents] = useState<Array<{
+    agentId: string;
+    name: string;
+    ip: string;
+    port: number;
+    osType: string;
+    latencyMs: number;
+    cpu: number;
+    ram: number;
+    isLocal: boolean;
+  }>>([]);
 
   // Cargar agentes reales conectados al backend
   useEffect(() => {

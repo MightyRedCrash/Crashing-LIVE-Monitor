@@ -1,21 +1,19 @@
 @echo off
-title Crashing LIVE - Agente de Monitoreo Windows (Python)
 cd /d "%~dp0"
 
-echo ===============================================================================
-echo            CRASHING LIVE - INICIANDO AGENTE WINDOWS (PYTHON)
-echo ===============================================================================
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [!] Python no encontrado en el PATH de Windows.
-    echo [i] Iniciando automaticamente la version nativa PowerShell (sin dependencias)...
-    call "%~dp0iniciar_agente.bat" %*
-    exit /b %errorlevel%
+:: Verificar si pythonw.exe esta disponible (ejecutable de Windows sin consola)
+where pythonw >nul 2>&1
+if %errorlevel% equ 0 (
+    start "" pythonw "%~dp0agent_daemon.pyw" %*
+    exit /b 0
 )
 
-python "%~dp0agent_daemon.py" %*
-if %errorlevel% neq 0 (
-    echo.
-    echo [x] El agente se ha detenido.
-    pause
+where python >nul 2>&1
+if %errorlevel% equ 0 (
+    start "" python "%~dp0agent_daemon.pyw" %*
+    exit /b 0
 )
+
+:: Fallback a PowerShell si Python no esta instalado
+call "%~dp0iniciar_agente.bat" %*
+exit /b %errorlevel%

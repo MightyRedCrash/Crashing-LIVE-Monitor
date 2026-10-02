@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Drawing;
 using System.Windows.Forms;
@@ -122,37 +123,74 @@ namespace CrashingLiveInstaller
         {
             if (string.IsNullOrEmpty(targetDir)) targetDir = GetDefaultInstallDir();
 
-            // 1. Detener procesos activos y servicios
+            // 1. Detener y eliminar el Servicio de Windows registrado para el agente y tareas programadas
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
+                ProcessStartInfo psiServices = new ProcessStartInfo("powershell.exe",
                     "-NoProfile -ExecutionPolicy Bypass -Command \"" +
-                    "taskkill /f /fi 'WINDOWTITLE eq Crashing LIVE*' 2>$null; " +
-                    "Get-Process | Where-Object { $_.MainWindowTitle -like '*Crashing LIVE*' } | Stop-Process -Force -ErrorAction SilentlyContinue; " +
-                    "Get-WmiObject Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent_daemon.ps1*' -or $_.CommandLine -like '*agent_daemon.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; " +
-                    "schtasks.exe /end /tn 'CrashingLiveAgent' 2>$null; " +
-                    "schtasks.exe /delete /tn 'CrashingLiveAgent' /f 2>$null; " +
                     "sc.exe stop CrashingLiveAgent 2>$null; " +
                     "sc.exe delete CrashingLiveAgent 2>$null; " +
+                    "schtasks.exe /end /tn 'CrashingLiveAgent' /f 2>$null; " +
+                    "schtasks.exe /delete /tn 'CrashingLiveAgent' /f 2>$null; " +
                     "\"");
-                psi.WindowStyle = ProcessWindowStyle.Hidden;
-                psi.CreateNoWindow = true;
-                using (Process p = Process.Start(psi))
+                psiServices.WindowStyle = ProcessWindowStyle.Hidden;
+                psiServices.CreateNoWindow = true;
+                using (Process p = Process.Start(psiServices))
                 {
                     if (p != null) p.WaitForExit(4000);
                 }
             }
             catch {}
 
-            // 2. Eliminar accesos directos del escritorio y Menú Inicio
+            // 2. Forzar el cierre de cualquier proceso residual del agente y monitor en memoria
             try
             {
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                string[] shortcuts = new string[] {
-                    Path.Combine(desktop, "Crashing LIVE Agente.lnk"),
-                    Path.Combine(desktop, "Crashing LIVE Monitor.lnk")
+                ProcessStartInfo psiKill = new ProcessStartInfo("powershell.exe",
+                    "-NoProfile -ExecutionPolicy Bypass -Command \"" +
+                    "taskkill.exe /f /fi 'WINDOWTITLE eq Crashing LIVE*' 2>$null; " +
+                    "Get-Process | Where-Object { $_.MainWindowTitle -like '*Crashing LIVE*' } | Stop-Process -Force -ErrorAction SilentlyContinue; " +
+                    "Get-WmiObject Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent_daemon*' -or $_.CommandLine -like '*Crashing LIVE*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; " +
+                    "Get-Process -Name 'crashinglive_monitor' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; " +
+                    "\"");
+                psiKill.WindowStyle = ProcessWindowStyle.Hidden;
+                psiKill.CreateNoWindow = true;
+                using (Process p = Process.Start(psiKill))
+                {
+                    if (p != null) p.WaitForExit(4000);
+                }
+            }
+            catch {}
+
+            // 3. Eliminar accesos directos creados (Escritorio, Menú Inicio y Startup)
+            try
+            {
+                List<string> shortcutPaths = new List<string>();
+
+                // Escritorio (Usuario actual y Público)
+                string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                string commonDesktop = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
+                string[] linkNames = new string[] {
+                    "Crashing LIVE Agente.lnk",
+                    "Crashing LIVE Monitor.lnk",
+                    "Crashing LIVE.lnk"
                 };
-                foreach (string sc in shortcuts)
+
+                foreach (string name in linkNames)
+                {
+                    if (!string.IsNullOrEmpty(userDesktop)) shortcutPaths.Add(Path.Combine(userDesktop, name));
+                    if (!string.IsNullOrEmpty(commonDesktop)) shortcutPaths.Add(Path.Combine(commonDesktop, name));
+                }
+
+                // Startup (Inicio automático Usuario actual y All Users)
+                string userStartup = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+                string commonStartup = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
+                foreach (string name in linkNames)
+                {
+                    if (!string.IsNullOrEmpty(userStartup)) shortcutPaths.Add(Path.Combine(userStartup, name));
+                    if (!string.IsNullOrEmpty(commonStartup)) shortcutPaths.Add(Path.Combine(commonStartup, name));
+                }
+
+                foreach (string sc in shortcutPaths)
                 {
                     if (File.Exists(sc))
                     {
@@ -160,45 +198,132 @@ namespace CrashingLiveInstaller
                     }
                 }
 
-                string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Crashing LIVE");
-                if (Directory.Exists(startMenu))
+                // Menú Inicio (Carpetas completas en Programs)
+                string userPrograms = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Crashing LIVE");
+                if (Directory.Exists(userPrograms))
                 {
-                    try { Directory.Delete(startMenu, true); } catch {}
+                    try { Directory.Delete(userPrograms, true); } catch {}
+                }
+
+                string commonPrograms = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "Crashing LIVE");
+                if (Directory.Exists(commonPrograms))
+                {
+                    try { Directory.Delete(commonPrograms, true); } catch {}
                 }
             }
             catch {}
 
-            // 3. Limpiar claves de registro asociadas
+            // 4. Eliminar las carpetas del programa y residuos en %ProgramData%, %AppData% o %LocalAppData%
             try
             {
-                using (RegistryKey cu = Registry.CurrentUser.OpenSubKey("Software", true))
+                List<string> dirsToDelete = new List<string>();
+                if (!string.IsNullOrEmpty(targetDir)) dirsToDelete.Add(targetDir);
+
+                string localApp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Crashing LIVE");
+                dirsToDelete.Add(localApp);
+
+                string roamingApp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Crashing LIVE");
+                dirsToDelete.Add(roamingApp);
+
+                string programData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Crashing LIVE");
+                dirsToDelete.Add(programData);
+
+                string programFiles = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Crashing LIVE");
+                dirsToDelete.Add(programFiles);
+
+                foreach (string dir in dirsToDelete)
                 {
-                    if (cu != null)
+                    if (Directory.Exists(dir))
                     {
-                        cu.DeleteSubKeyTree("Crashing LIVE", false);
+                        for (int attempt = 0; attempt < 3; attempt++)
+                        {
+                            try
+                            {
+                                Directory.Delete(dir, true);
+                                break;
+                            }
+                            catch
+                            {
+                                System.Threading.Thread.Sleep(300);
+                            }
+                        }
                     }
                 }
             }
             catch {}
 
-            // 4. Eliminar archivos y directorio de instalación (con reintentos)
+            // 5. Purgar las claves creadas en el registro de Windows (HKLM / HKCU)
             try
             {
-                if (Directory.Exists(targetDir))
+                // HKCU Software
+                using (RegistryKey cuSoftware = Registry.CurrentUser.OpenSubKey("Software", true))
                 {
-                    for (int i = 0; i < 3; i++)
+                    if (cuSoftware != null)
                     {
-                        try
+                        try { cuSoftware.DeleteSubKeyTree("Crashing LIVE", false); } catch {}
+                        try { cuSoftware.DeleteSubKeyTree("CrashingLive", false); } catch {}
+                    }
+                }
+
+                // HKCU Run
+                using (RegistryKey cuRun = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (cuRun != null)
+                    {
+                        try { cuRun.DeleteValue("CrashingLiveAgent", false); } catch {}
+                        try { cuRun.DeleteValue("Crashing LIVE", false); } catch {}
+                    }
+                }
+
+                // HKCU Uninstall
+                using (RegistryKey cuUninstall = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall", true))
+                {
+                    if (cuUninstall != null)
+                    {
+                        try { cuUninstall.DeleteSubKeyTree("Crashing LIVE", false); } catch {}
+                    }
+                }
+
+                // HKLM Software (si tiene permisos elevados)
+                try
+                {
+                    using (RegistryKey lmSoftware = Registry.LocalMachine.OpenSubKey("Software", true))
+                    {
+                        if (lmSoftware != null)
                         {
-                            Directory.Delete(targetDir, true);
-                            break;
-                        }
-                        catch
-                        {
-                            System.Threading.Thread.Sleep(500);
+                            try { lmSoftware.DeleteSubKeyTree("Crashing LIVE", false); } catch {}
+                            try { lmSoftware.DeleteSubKeyTree("CrashingLive", false); } catch {}
                         }
                     }
                 }
+                catch {}
+
+                // HKLM Run
+                try
+                {
+                    using (RegistryKey lmRun = Registry.LocalMachine.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                    {
+                        if (lmRun != null)
+                        {
+                            try { lmRun.DeleteValue("CrashingLiveAgent", false); } catch {}
+                            try { lmRun.DeleteValue("Crashing LIVE", false); } catch {}
+                        }
+                    }
+                }
+                catch {}
+
+                // HKLM Uninstall
+                try
+                {
+                    using (RegistryKey lmUninstall = Registry.LocalMachine.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall", true))
+                    {
+                        if (lmUninstall != null)
+                        {
+                            try { lmUninstall.DeleteSubKeyTree("Crashing LIVE", false); } catch {}
+                        }
+                    }
+                }
+                catch {}
             }
             catch {}
         }
@@ -339,15 +464,21 @@ namespace CrashingLiveInstaller
                     File.WriteAllText(ps1File, ps1Code, Encoding.UTF8);
                 }
 
-                // Iniciar Agente Bat (con mini-ventana de status)
+                // Iniciar Agente VBS (100% Invisible sin ventana negra de consola)
+                string vbsFile = Path.Combine(targetDir, "iniciar_agente.vbs");
+                string vbsContent = "Set WshShell = CreateObject(\"WScript.Shell\")\r\n" +
+                    "Set FSO = CreateObject(\"Scripting.FileSystemObject\")\r\n" +
+                    "scriptDir = FSO.GetParentFolderName(WScript.ScriptFullName)\r\n" +
+                    "cmd = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\"\" & scriptDir & \"\\agent_daemon.ps1\"\"\"\r\n" +
+                    "WshShell.Run cmd, 0, False\r\n";
+                File.WriteAllText(vbsFile, vbsContent, Encoding.Default);
+
+                // Iniciar Agente Bat (Lanza VBS y sale de inmediato sin dejar ventana de terminal)
                 agentBatPath = Path.Combine(targetDir, "iniciar_agente.bat");
                 string batContent = "@echo off\r\n" +
-                    "title Crashing LIVE - Agente de Monitoreo Windows\r\n" +
                     "cd /d \"%~dp0\"\r\n" +
-                    "echo ===============================================================================\r\n" +
-                    "echo                CRASHING LIVE - INICIANDO AGENTE WINDOWS\r\n" +
-                    "echo ===============================================================================\r\n" +
-                    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0agent_daemon.ps1\" %*\r\n";
+                    "start \"\" wscript.exe \"%~dp0iniciar_agente.vbs\"\r\n" +
+                    "exit /b 0\r\n";
                 File.WriteAllText(agentBatPath, batContent, Encoding.Default);
 
                 // Script de servicio desatendido 24/7 (Scheduled Task)

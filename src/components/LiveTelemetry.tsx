@@ -143,14 +143,34 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
           <span className="text-[11px] text-zinc-500">Seleccione un equipo para ver su Task Manager en vivo</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {servers.map((srv) => {
-            const isSelected = srv.id === currentServerId;
-            const isOnline = srv.status === 'ONLINE';
-            const srvCpu = isSelected ? currentMetric.cpu : (srv.cpu ?? 0);
-            const srvRam = isSelected ? currentMetric.ram : (srv.ram ?? 0);
-            const ramUsed = isSelected ? currentMetric.ramUsedGB : (srv.ramUsedGB ?? 0);
-            const ramTotal = isSelected ? currentMetric.ramTotalGB : (srv.ramTotalGB ?? 16);
+        {servers.length === 0 ? (
+          <div className="p-8 rounded-2xl bg-[#121212] border border-zinc-800 text-center font-mono space-y-3">
+            <div className="w-12 h-12 rounded-xl bg-[#FF6600]/10 border border-[#FF6600]/25 text-[#FF6600] flex items-center justify-center mx-auto">
+              <Radio className="w-6 h-6 animate-pulse" />
+            </div>
+            <h3 className="text-sm font-bold text-white">Esperando conexión de Agentes...</h3>
+            <p className="text-xs text-zinc-400 max-w-md mx-auto">
+              Inicie el Agente en cualquier equipo Windows o vincúlelo mediante su Código AnyDesk para comenzar a recibir telemetría reactiva en tiempo real.
+            </p>
+            {onOpenDirectAnydesk && (
+              <button
+                onClick={onOpenDirectAnydesk}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FF6600] hover:bg-[#ff771a] text-black font-bold text-xs transition-all shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Vincular por Código AnyDesk</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {servers.map((srv) => {
+              const isSelected = srv.id === currentServerId;
+              const isOnline = srv.status === 'ONLINE';
+              const srvCpu = isSelected ? currentMetric.cpu : (srv.cpu ?? 0);
+              const srvRam = isSelected ? currentMetric.ram : (srv.ram ?? 0);
+              const ramUsed = isSelected ? currentMetric.ramUsedGB : (srv.ramUsedGB ?? 0);
+              const ramTotal = isSelected ? currentMetric.ramTotalGB : (srv.ramTotalGB ?? 16);
 
             return (
               <div
@@ -254,6 +274,7 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
             );
           })}
         </div>
+        )}
       </div>
 
       {/* ========================================================================= */}

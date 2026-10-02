@@ -430,14 +430,7 @@ export function parseAnyDeskCode(raw: string, fallbackSeed: string = 'CrashingLi
 }
 
 const connectedAgents = new Map<string, AgentSession>();
-
-// Seed default virtual nodes so the interface has sample agents available if needed
-const seedNodes = [
-  { rawId: '948201143', name: 'WINSRV-2022-DC01', ip: '192.168.1.140', os: 'Windows Server 2022', cpu: 24, ram: 64, ramUsed: 10.2, ramTotal: 16.0 },
-  { rawId: '834192750', name: 'WIN11-DEV-STATION', ip: '192.168.1.88', os: 'Windows 11 Pro', cpu: 18, ram: 52, ramUsed: 8.3, ramTotal: 16.0 },
-  { rawId: '550184902', name: 'CONTABILIDAD-PC', ip: '192.168.1.55', os: 'Windows 10 Pro', cpu: 14, ram: 46, ramUsed: 7.4, ramTotal: 16.0 },
-  { rawId: '712409338', name: 'WINSRV-BACKUP02', ip: '10.0.2.14', os: 'Windows Server 2019', cpu: 42, ram: 70, ramUsed: 22.4, ramTotal: 32.0 },
-];
+const codeToAgentId = new Map<string, string>();
 
 const sampleProcesses: ProcessItem[] = [
   { pid: 4, name: "System", cpu: 1.2, memoryMB: 128.4, user: "SYSTEM", status: "running" },
@@ -453,44 +446,6 @@ const sampleProcesses: ProcessItem[] = [
   { pid: 7890, name: "spoolsv.exe", cpu: 0.1, memoryMB: 42.0, user: "SYSTEM", status: "running" },
   { pid: 8410, name: "postgres.exe", cpu: 4.1, memoryMB: 680.5, user: "postgres", status: "running" }
 ];
-
-for (const node of seedNodes) {
-  const codes = parseAnyDeskCode(node.rawId, node.name);
-  const now = Date.now();
-  const timeStr = new Date(now).toLocaleTimeString('es-ES', { hour12: false });
-  const session: AgentSession = {
-    agentId: codes.agentId,
-    serverId: codes.agentId,
-    displayCode: codes.displayCode,
-    numericCode: codes.numericCode,
-    hostname: node.name,
-    ip: node.ip,
-    port: 8443,
-    osType: node.os,
-    status: 'ONLINE',
-    cpu: node.cpu,
-    ram: node.ram,
-    ramUsedGB: node.ramUsed,
-    ramTotalGB: node.ramTotal,
-    diskPercent: 48,
-    diskFreeGB: 240,
-    diskTotalGB: 512,
-    diskReadMB: 2.1,
-    diskWriteMB: 0.8,
-    netInKB: 2400,
-    netOutKB: 850,
-    uptimeSeconds: 124500,
-    servicesRunning: 128,
-    lastPing: 'En vivo',
-    lastSeen: now,
-    processes: sampleProcesses,
-    history: [
-      { time: timeStr, cpu: node.cpu, ram: node.ram, ramUsedGB: node.ramUsed, ramTotalGB: node.ramTotal, netInKB: 2400, netOutKB: 850, diskReadMB: 2.1, diskWriteMB: 0.8 }
-    ]
-  };
-  connectedAgents.set(codes.numericCode, session);
-  connectedAgents.set(codes.agentId, session);
-}
 
 // Lightweight cache for host telemetry to avoid redundant CPU/interface queries
 let cachedHostTelemetry: { data: any; expiresAt: number } | null = null;
@@ -689,7 +644,8 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
       }))
     : sampleProcesses;
 
-  let session = connectedAgents.get(numericCode) || connectedAgents.get(agentId);
+  const canonicalId = codeToAgentId.get(numericCode) || agentId;
+  let session = connectedAgents.get(canonicalId);
 
   if (!session) {
     session = {
@@ -761,8 +717,8 @@ const handleAgentReport = (req: express.Request, res: express.Response) => {
     session.history.shift();
   }
 
-  connectedAgents.set(numericCode, session);
   connectedAgents.set(agentId, session);
+  codeToAgentId.set(numericCode, agentId);
 
   // Reenviar actualización instantánea en vivo por SSE a todos los dashboards conectados
   broadcastAgentsUpdate();
@@ -806,10 +762,28 @@ app.get('/api/agents', (req, res) => {
 });
 
 // API: Get Top Processes for a specific server (Task Manager style)
+function findAgentSession(query: string): AgentSession | undefined {
+  if (!query) return undefined;
+  const qClean = String(query).trim();
+  if (connectedAgents.has(qClean)) return connectedAgents.get(qClean);
+  const idFromNum = codeToAgentId.get(qClean);
+  if (idFromNum && connectedAgents.has(idFromNum)) return connectedAgents.get(idFromNum);
+  const { agentId, numericCode } = parseAnyDeskCode(qClean);
+  if (connectedAgents.has(agentId)) return connectedAgents.get(agentId);
+  const idFromParsed = codeToAgentId.get(numericCode);
+  if (idFromParsed && connectedAgents.has(idFromParsed)) return connectedAgents.get(idFromParsed);
+  for (const s of connectedAgents.values()) {
+    if (s.hostname.toLowerCase() === qClean.toLowerCase() || s.serverId === qClean) {
+      return s;
+    }
+  }
+  return undefined;
+}
+
+// API: Get Top Processes for a specific server (Task Manager style)
 app.get('/api/agents/:agentId/processes', (req, res) => {
   const { agentId: rawId } = req.params;
-  const { agentId, numericCode } = parseAnyDeskCode(rawId);
-  const session = connectedAgents.get(numericCode) || connectedAgents.get(agentId);
+  const session = findAgentSession(rawId);
 
   if (!session) {
     return res.status(404).json({ success: false, error: 'Servidor no encontrado' });
@@ -830,18 +804,8 @@ app.post('/api/agents/connect', (req, res) => {
     return res.status(400).json({ success: false, error: 'Código de agente requerido' });
   }
 
-  const { agentId, displayCode, numericCode } = parseAnyDeskCode(agentCode);
-  let session = connectedAgents.get(numericCode) || connectedAgents.get(agentId);
-
-  // If not found by code, try matching by hostname
-  if (!session) {
-    for (const s of connectedAgents.values()) {
-      if (s.hostname.toLowerCase() === String(agentCode).toLowerCase()) {
-        session = s;
-        break;
-      }
-    }
-  }
+  const { displayCode } = parseAnyDeskCode(agentCode);
+  const session = findAgentSession(agentCode);
 
   if (!session) {
     return res.status(404).json({
@@ -851,7 +815,7 @@ app.post('/api/agents/connect', (req, res) => {
   }
 
   const now = Date.now();
-  const isOnline = (now - session.lastSeen) < 30000;
+  const isOnline = (now - session.lastSeen) < 20000;
 
   return res.json({
     success: true,
